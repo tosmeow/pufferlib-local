@@ -80,7 +80,14 @@ static Dict* py_dict_to_c_dict(py::dict py_dict) {
     for (auto item : py_dict) {
         const char* key = PyUnicode_AsUTF8(item.first.ptr());
         try { dict_set(c_dict, key, item.second.cast<double>()); }
-        catch (const py::cast_error&) {}
+        catch (const py::cast_error&) {
+            try {
+                std::string value = item.second.cast<std::string>();
+                char* stored = (char*)malloc(value.size() + 1);
+                memcpy(stored, value.c_str(), value.size() + 1);
+                dict_set_ptr(c_dict, key, stored);
+            } catch (const py::cast_error&) {}
+        }
     }
     return c_dict;
 }

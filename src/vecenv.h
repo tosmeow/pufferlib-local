@@ -63,6 +63,18 @@ static inline void dict_set(Dict* dict, const char* key, double value) {
     dict->size++;
 }
 
+static inline void dict_set_ptr(Dict* dict, const char* key, void* ptr) {
+    assert(dict->size < dict->capacity);
+    DictItem* item = dict_get_unsafe(dict, key);
+    if (item != NULL) {
+        item->ptr = ptr;
+        return;
+    }
+    dict->items[dict->size].key = key;
+    dict->items[dict->size].ptr = ptr;
+    dict->size++;
+}
+
 // Forward declare CUDA stream type
 typedef struct CUstream_st* cudaStream_t;
 

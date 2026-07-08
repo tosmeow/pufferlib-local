@@ -293,7 +293,14 @@ Dict* py_dict_to_c_dict(py::dict py_dict) {
         try {
             dict_set(c_dict, key, item.second.cast<double>());
         } catch (const py::cast_error&) {
-            // Skip non-numeric values
+            try {
+                std::string value = item.second.cast<std::string>();
+                char* stored = (char*)malloc(value.size() + 1);
+                memcpy(stored, value.c_str(), value.size() + 1);
+                dict_set_ptr(c_dict, key, stored);
+            } catch (const py::cast_error&) {
+                // Skip unsupported values
+            }
         }
     }
     return c_dict;

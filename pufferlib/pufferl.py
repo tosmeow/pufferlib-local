@@ -12,6 +12,8 @@ import ast
 import time
 import argparse
 import configparser
+import shlex
+import subprocess
 from collections import defaultdict
 import multiprocessing as mp
 from copy import deepcopy
@@ -22,8 +24,10 @@ import torch
 import pufferlib
 try:
     from pufferlib import _C
-except ImportError:
-    raise ImportError('Failed to import PufferLib C++ backend. If you have non-default PyTorch, try installing with --no-build-isolation')
+    _C_IMPORT_ERROR = None
+except ImportError as e:
+    _C = None
+    _C_IMPORT_ERROR = e
 
 from pufferlib import selfplay
 
@@ -168,14 +172,27 @@ def validate_config(args):
     assert minibatch_size <= horizon * total_agents, \
         f'minibatch_size {minibatch_size} > total_agents {total_agents} * horizon {horizon}'
 
+def _require_backend(env_name=None):
+    if _C is not None:
+        return _C
+
+    hint = 'Run `puffer build ENV` first.'
+    if env_name is not None:
+        hint = f'Run `puffer build {env_name}` first.'
+    raise ImportError(
+        'Failed to import PufferLib C++ backend. '
+        f'{hint} If you have non-default PyTorch, try installing with --no-build-isolation'
+    ) from _C_IMPORT_ERROR
+
 def _resolve_backend(args):
-    compiled_env = getattr(_C, 'env_name', None)
+    native_backend = _require_backend(args.get('env_name'))
+    compiled_env = getattr(native_backend, 'env_name', None)
     assert compiled_env is None or compiled_env == args['env_name'], \
         f'build.sh was run for {compiled_env}, not {args["env_name"]}'
-    if args.get('slowly'):
+    if args.get('slowly') or getattr(native_backend, 'gpu', 1) == 0:
         from pufferlib.torch_pufferl import PuffeRL
         return PuffeRL
-    return _C
+    return native_backend
 
 def _train_worker(args):
     backend = _resolve_backend(args)
@@ -377,6 +394,7 @@ def _train(env_name, args, sweep_obj=None, result_queue=None, verbose=False):
             result_queue.put((args['gpu_id'], metrics['env/score'], metrics['uptime'], metrics['agent_steps']))
 
 def train(env_name, args=None, gpus=None, **kwargs):
+    native_backend = _require_backend(env_name)
     args = args or load_config(env_name)
     validate_config(args)
 
@@ -384,7 +402,7 @@ def train(env_name, args=None, gpus=None, **kwargs):
     gpus = list(gpus or range(args['train']['gpus']))
     args['train']['total_timesteps'] //= len(gpus)
     args['world_size'] = len(gpus)
-    args['nccl_id'] = _C.get_nccl_id() if len(gpus) > 1 else b''
+    args['nccl_id'] = native_backend.get_nccl_id() if len(gpus) > 1 else b''
 
     if not subprocess:
         gpus = gpus[-1:] + gpus[:-1]  # Main process gets rank 0
@@ -494,6 +512,34 @@ def eval(env_name, args=None, load_path=None):
 
     backend.close(pufferl)
 
+def replay(env_name, args=None):
+    '''Render one native env while stepping all-zero actions.'''
+    args = deepcopy(args or load_config(env_name))
+    native_backend = _require_backend(env_name)
+    compiled_env = getattr(native_backend, 'env_name', None)
+    assert compiled_env is None or compiled_env == env_name, \
+        f'build.sh was run for {compiled_env}, not {env_name}'
+
+    args['vec']['total_agents'] = 1
+    args['vec']['num_buffers'] = 1
+    args['train']['horizon'] = 1
+
+    vec = native_backend.create_vec(args, 0)
+    actions = np.zeros((vec.total_agents, vec.num_atns), dtype=np.float32)
+    frame_dt = 1.0 / max(float(args.get('fps', 15)), 1e-6)
+
+    try:
+        vec.reset()
+        while True:
+            start = time.time()
+            vec.render(0)
+            vec.cpu_step(actions.ctypes.data)
+            elapsed = time.time() - start
+            if elapsed < frame_dt:
+                time.sleep(frame_dt - elapsed)
+    finally:
+        vec.close()
+
 def match(env_name, policy_a_path, policy_b_path, num_games=4096, args=None, verbose=True):
     '''Head-to-head match between two trained policies in a 2-agent selfplay env.
     Policy A plays slot 0 (e.g. white in chess), policy B plays slot 1 (black).
@@ -509,7 +555,7 @@ def match(env_name, policy_a_path, policy_b_path, num_games=4096, args=None, ver
     args['vec']['num_buffers'] = 2
     args['vec']['total_agents'] = 8192
     backend = _resolve_backend(args)
-    if backend is not _C:
+    if backend is not _require_backend(env_name):
         raise RuntimeError('match() requires the native CUDA backend')
 
     def _resolve_latest(path):
@@ -582,6 +628,16 @@ def match(env_name, policy_a_path, policy_b_path, num_games=4096, args=None, ver
     backend.close(pufferl)
     return logs
 
+def _config_paths(repo_dir):
+    config_globs = (
+        os.path.join(repo_dir, 'config/**/*.ini'),
+        os.path.join(repo_dir, 'ocean/**/*.ini'),
+    )
+    paths = []
+    for pattern in config_globs:
+        paths.extend(sorted(glob.glob(pattern, recursive=True)))
+    return paths
+
 def load_config(env_name):
     parser = argparse.ArgumentParser(formatter_class=RichHelpFormatter, add_help=False)
     parser.add_argument('--load-model-path', type=str, default=None,
@@ -610,14 +666,13 @@ def load_config(env_name):
         ' demo options. Shows valid args for your env and policy'
 
     repo_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
-    puffer_config_dir = os.path.join(repo_dir, 'config/**/*.ini')
     puffer_default_config = os.path.join(repo_dir, 'config/default.ini')
     #CC: Remove the default. Just raise an error on "puffer train" etc with no env (think we already do)
     if env_name == 'default':
         p = configparser.ConfigParser()
         p.read(puffer_default_config)
     else:
-        for path in glob.glob(puffer_config_dir, recursive=True):
+        for path in _config_paths(repo_dir):
             p = configparser.ConfigParser()
             p.read([puffer_default_config, path])
             if env_name in p['base']['env_name'].split(): break
@@ -658,19 +713,128 @@ def load_config(env_name):
         args.setdefault(section, {})
     return dict(args)
 
+def _available_env_names():
+    repo_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+    names = set()
+    for path in _config_paths(repo_dir):
+        parser = configparser.ConfigParser()
+        parser.read(path)
+        if 'base' not in parser or 'env_name' not in parser['base']:
+            continue
+        for name in parser['base']['env_name'].split():
+            if name and name != 'None':
+                names.add(name)
+    return sorted(names)
+
+def _format_env_names(names, width=88):
+    if not names:
+        return '  (no env configs found)'
+
+    lines = []
+    line = '  '
+    for name in names:
+        token = f'{name}  '
+        if len(line) + len(token) > width:
+            lines.append(line.rstrip())
+            line = '  ' + token
+        else:
+            line += token
+    lines.append(line.rstrip())
+    return '\n'.join(lines)
+
+def _global_help():
+    modes = 'build, train, eval, replay, sweep, paretosweep, match'
+    envs = _format_env_names(_available_env_names())
+    return f'''Usage:
+  puffer [mode] [env_name] [optional args]
+
+Modes:
+  {modes}
+
+Examples:
+  puffer build breakout
+  puffer build breakout --cpu
+  puffer train breakout --help
+  puffer train breakout --slowly
+  puffer eval breakout --load-model-path latest
+  puffer replay queue_reactive --fps 10
+  puffer sweep breakout
+
+Available env configs:
+{envs}
+
+Tip:
+  PufferLib help is env-specific. Use `puffer train ENV --help` to see the
+  full option surface for a specific environment.
+'''
+
+def _build_help():
+    return '''Usage:
+  puffer build [env_name] [build.sh args]
+
+Examples:
+  puffer build breakout
+  puffer build breakout --cpu
+  puffer build breakout --debug
+  puffer build breakout --local
+  puffer build breakout --fast
+
+Notes:
+  `puffer build ENV` is a convenience wrapper around the repository build script.
+  On macOS with `scripts/build_macos_cpu.sh` present, it uses that helper so the
+  local Apple Silicon CPU build works cleanly. On other platforms, it runs
+  `bash build.sh ENV ...`.
+'''
+
+def build(env_name, build_args=None):
+    build_args = list(build_args or [])
+    repo_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+    if env_name in ('-h', '--help', 'help') or any(arg in ('-h', '--help', 'help') for arg in build_args):
+        print(_build_help())
+        return
+
+    env_dir = os.path.join(repo_dir, 'ocean', env_name)
+    if env_name not in ('constellation', 'trailer') and not os.path.isdir(env_dir):
+        raise ValueError(f'No ocean env found at {env_dir}')
+
+    env = os.environ.copy()
+    env.setdefault('PYTHON', sys.executable)
+
+    macos_helper = os.path.join(repo_dir, 'scripts', 'build_macos_cpu.sh')
+    if sys.platform == 'darwin' and os.path.exists(macos_helper):
+        cmd = [macos_helper, env_name, *build_args]
+    else:
+        cmd = ['bash', 'build.sh', env_name, *build_args]
+
+    print('Running:', ' '.join(shlex.quote(part) for part in cmd))
+    completed = subprocess.run(cmd, cwd=repo_dir, env=env)
+    raise SystemExit(completed.returncode)
+
 def main():
-    err = 'Usage: puffer [train, eval, sweep, paretosweep, match] [env_name] [optional args]. --help for more info'
+    err = 'Usage: puffer [build, train, eval, replay, sweep, paretosweep, match] [env_name] [optional args]. --help for more info'
+    if len(sys.argv) == 1 or sys.argv[1] in ('-h', '--help', 'help'):
+        print(_global_help())
+        return
+
     if len(sys.argv) < 3:
-        raise ValueError(err)
+        print('Error: missing mode or env_name.\n', file=sys.stderr)
+        print(_global_help(), file=sys.stderr)
+        raise SystemExit(2)
 
     mode = sys.argv.pop(1)
     env_name = sys.argv.pop(1)
+    if mode == 'build':
+        build(env_name, sys.argv[1:])
+        return
+
     args = load_config(env_name)
 
     if 'train' in mode:
         train(env_name=env_name, args=args)
     elif 'eval' in mode:
         eval(env_name=env_name, args=args)
+    elif 'replay' in mode:
+        replay(env_name=env_name, args=args)
     elif 'sweep' in mode:
         sweep(env_name=env_name, args=args, pareto='pareto' in mode)
     elif 'match' in mode:
