@@ -30,13 +30,13 @@ int main(void) {
         printf(
             "step=%d time=%lld inv=%d cash=%.0f fill=%d reject=%d qr=%d lost=%d reward=%.1f\n",
             step,
-            (long long)env.time_ns,
-            env.inventory,
-            env.cash,
-            env.last_action_filled,
-            env.last_action_rejected,
-            env.last_qr_type,
-            env.last_action_lost_race,
+            (long long)env.clock.time_ns,
+            env.account.inventory,
+            env.account.cash,
+            env.last_action.filled,
+            env.last_action.rejected,
+            env.last_qr.type,
+            env.last_action.lost_race,
             rewards[0]
         );
     }

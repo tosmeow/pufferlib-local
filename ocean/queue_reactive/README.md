@@ -24,9 +24,13 @@ The calibration CSVs are intentionally external data, not vendored here.
 ## Own-Order Accounting
 
 The QR core order book remains an aggregate price-level book. The environment
-adds a small private overlay in `QueueReactive::orders` for our own resting
+adds a small private overlay in `QueueReactive::own.orders` for our own resting
 orders. This keeps the hot path fixed-size (`QR_MAX_ORDERS`) and avoids adding
 per-order state to the calibrated simulator.
+
+The main `QueueReactive` struct keeps Puffer ABI fields flat, then groups QR
+state into small sub-structures: `own`, `account`, `last_action`, `last_qr`,
+`clock`, and `status`.
 
 Each own order stores:
 

@@ -304,7 +304,7 @@ static int market_limit_price(qr::OrderBook& lob, int side, int level) {
 static int own_remaining_at(QueueReactive* env, int side, int price) {
     int remaining = 0;
     for (int i = 0; i < QR_MAX_ORDERS; i++) {
-        const QRAgentOrder& order = env->orders[i];
+        const QRAgentOrder& order = env->own.orders[i];
         if (order.active && order.side == side && order.price == price) {
             remaining += order.remaining;
         }
@@ -314,7 +314,7 @@ static int own_remaining_at(QueueReactive* env, int side, int price) {
 
 static int first_free_slot(QueueReactive* env) {
     for (int i = 0; i < QR_MAX_ORDERS; i++) {
-        if (!env->orders[i].active) return i;
+        if (!env->own.orders[i].active) return i;
     }
     return -1;
 }
@@ -326,15 +326,15 @@ static int collect_orders_at(
         std::array<int, QR_MAX_ORDERS>& slots) {
     int count = 0;
     for (int i = 0; i < QR_MAX_ORDERS; i++) {
-        const QRAgentOrder& order = env->orders[i];
+        const QRAgentOrder& order = env->own.orders[i];
         if (order.active && order.side == side && order.price == price) {
             slots[count++] = i;
         }
     }
 
     std::sort(slots.begin(), slots.begin() + count, [&](int a, int b) {
-        const QRAgentOrder& lhs = env->orders[a];
-        const QRAgentOrder& rhs = env->orders[b];
+        const QRAgentOrder& lhs = env->own.orders[a];
+        const QRAgentOrder& rhs = env->own.orders[b];
         if (lhs.ahead != rhs.ahead) return lhs.ahead < rhs.ahead;
         return lhs.id < rhs.id;
     });
@@ -353,9 +353,9 @@ static bool worse_agent_order(const QRAgentOrder& candidate, const QRAgentOrder&
 static int worst_order_slot(QueueReactive* env, int side) {
     int slot = -1;
     for (int i = 0; i < QR_MAX_ORDERS; i++) {
-        const QRAgentOrder& order = env->orders[i];
+        const QRAgentOrder& order = env->own.orders[i];
         if (!order.active || order.side != side) continue;
-        if (slot < 0 || worse_agent_order(order, env->orders[slot])) slot = i;
+        if (slot < 0 || worse_agent_order(order, env->own.orders[slot])) slot = i;
     }
     return slot;
 }
@@ -363,7 +363,7 @@ static int worst_order_slot(QueueReactive* env, int side) {
 static void reduce_orders_behind(QueueReactive* env, int side, int price, int order_id, int qty) {
     if (qty <= 0) return;
     for (int i = 0; i < QR_MAX_ORDERS; i++) {
-        QRAgentOrder& order = env->orders[i];
+        QRAgentOrder& order = env->own.orders[i];
         if (!order.active || order.side != side || order.price != price || order.id <= order_id) continue;
         order.ahead = std::max(0, order.ahead - qty);
     }
@@ -372,14 +372,14 @@ static void reduce_orders_behind(QueueReactive* env, int side, int price, int or
 static void fill_agent_order(QueueReactive* env, QRAgentOrder& order, int fill_size) {
     if (fill_size <= 0) return;
     if (order.side == QR_SIDE_BUY) {
-        env->inventory += fill_size;
-        env->cash -= static_cast<double>(order.price) * fill_size;
+        env->account.inventory += fill_size;
+        env->account.cash -= static_cast<double>(order.price) * fill_size;
     } else {
-        env->inventory -= fill_size;
-        env->cash += static_cast<double>(order.price) * fill_size;
+        env->account.inventory -= fill_size;
+        env->account.cash += static_cast<double>(order.price) * fill_size;
     }
     order.remaining -= fill_size;
-    env->last_action_filled += fill_size;
+    env->last_action.filled += fill_size;
     env->log.agent_fills += 1.0f;
     reduce_orders_behind(env, order.side, order.price, order.id, fill_size);
     if (order.remaining <= 0) {
@@ -392,7 +392,7 @@ static void apply_passive_fills(QueueReactive* env, int resting_side, int price,
     std::array<int, QR_MAX_ORDERS> slots{};
     int count = collect_orders_at(env, resting_side, price, slots);
     for (int i = 0; i < count && remaining_trade > 0; i++) {
-        QRAgentOrder& order = env->orders[slots[i]];
+        QRAgentOrder& order = env->own.orders[slots[i]];
         if (!order.active) continue;
         int ahead_take = std::min(remaining_trade, order.ahead);
         order.ahead -= ahead_take;
@@ -442,7 +442,7 @@ static void sample_public_cancel_decrements(
     int previous_end = 0;
     int prefix_cancel = 0;
     for (int i = 0; i < count; i++) {
-        QRAgentOrder& order = env->orders[slots[i]];
+        QRAgentOrder& order = env->own.orders[slots[i]];
         int order_ahead = clamp_int(order.ahead, 0, level_volume);
         int public_segment = std::max(0, order_ahead - previous_end);
         public_segment = std::min(public_segment, remaining_public);
@@ -461,8 +461,8 @@ static void apply_ahead_decrements(
         QueueReactive* env,
         const std::array<int, QR_MAX_ORDERS>& ahead_decrements) {
     for (int i = 0; i < QR_MAX_ORDERS; i++) {
-        if (!env->orders[i].active || ahead_decrements[i] <= 0) continue;
-        env->orders[i].ahead = std::max(0, env->orders[i].ahead - ahead_decrements[i]);
+        if (!env->own.orders[i].active || ahead_decrements[i] <= 0) continue;
+        env->own.orders[i].ahead = std::max(0, env->own.orders[i].ahead - ahead_decrements[i]);
     }
 }
 
@@ -476,11 +476,11 @@ static void update_inventory_from_aggressive_fills(
         QueueReactive* env, int side, const std::vector<qr::Fill>& fills) {
     for (const auto& fill : fills) {
         if (side == QR_SIDE_BUY) {
-            env->inventory += fill.size;
-            env->cash -= static_cast<double>(fill.price) * fill.size;
+            env->account.inventory += fill.size;
+            env->account.cash -= static_cast<double>(fill.price) * fill.size;
         } else {
-            env->inventory -= fill.size;
-            env->cash += static_cast<double>(fill.price) * fill.size;
+            env->account.inventory -= fill.size;
+            env->account.cash += static_cast<double>(fill.price) * fill.size;
         }
     }
 }
@@ -491,13 +491,13 @@ static void maybe_add_residual_order(
     int slot = first_free_slot(env);
     if (slot < 0) return;
     int passive_agent_side = side == QR_SIDE_BUY ? QR_SIDE_BUY : QR_SIDE_SELL;
-    env->orders[slot] = {
+    env->own.orders[slot] = {
         1,
         passive_agent_side,
         order.price,
         order.size - fill,
         0,
-        env->next_order_id++,
+        env->own.next_order_id++,
     };
     env->log.agent_orders += 1.0f;
 }
@@ -509,35 +509,35 @@ static void cancel_worst_agent_order(QueueReactive* env) {
     // over own order id/slot, not this env-side heuristic.
     QRSim* s = sim(env);
     qr::OrderBook& lob = *s->lob;
-    int side = env->last_action_side;
+    int side = env->last_action.side;
     int slot = worst_order_slot(env, side);
     if (slot < 0) {
-        env->last_action_rejected = 1;
+        env->last_action.rejected = 1;
         env->log.agent_rejected += 1.0f;
         return;
     }
 
-    QRAgentOrder& own = env->orders[slot];
+    QRAgentOrder& own = env->own.orders[slot];
     int original_remaining = own.remaining;
     int level_volume = safe_volume_at(lob, passive_side(side), own.price);
     int cancel_size = std::min(own.remaining, level_volume);
     if (cancel_size <= 0) {
-        env->last_action_rejected = 1;
+        env->last_action.rejected = 1;
         env->log.agent_rejected += 1.0f;
         own = {};
         return;
     }
-    qr::Order cancel(qr::OrderType::Cancel, passive_side(side), own.price, cancel_size, env->time_ns);
+    qr::Order cancel(qr::OrderType::Cancel, passive_side(side), own.price, cancel_size, env->clock.time_ns);
     lob.process(cancel);
     if (cancel.rejected) {
-        env->last_action_rejected = 1;
+        env->last_action.rejected = 1;
         env->log.agent_rejected += 1.0f;
         return;
     }
 
     reduce_orders_behind(env, own.side, own.price, own.id, cancel_size);
-    env->last_action_price = own.price;
-    env->last_action_partial = cancel.partial ? 1 : 0;
+    env->last_action.price = own.price;
+    env->last_action.partial = cancel.partial ? 1 : 0;
     own.remaining -= cancel_size;
     if (own.remaining <= 0 || cancel.partial || cancel_size < original_remaining) own = {};
     env->log.agent_cancels += 1.0f;
@@ -550,13 +550,13 @@ static void process_agent_intervention(QueueReactive* env) {
     int side = static_cast<int>(env->actions[1]) == QR_SIDE_SELL ? QR_SIDE_SELL : QR_SIDE_BUY;
     int level_or_slot = clamp_int(static_cast<int>(env->actions[2]), 0, QR_ACTION_PRICE_CHOICES - 1);
     int size = action_size(s, env->actions[3]);
-    env->last_action_type = type;
-    env->last_action_side = side;
-    env->last_action_rejected = 0;
-    env->last_action_partial = 0;
-    env->last_action_filled = 0;
-    env->last_action_price = 0;
-    env->last_action_lost_race = 0;
+    env->last_action.type = type;
+    env->last_action.side = side;
+    env->last_action.rejected = 0;
+    env->last_action.partial = 0;
+    env->last_action.filled = 0;
+    env->last_action.price = 0;
+    env->last_action.lost_race = 0;
 
     if (type == QR_ACTION_NOOP) return;
 
@@ -572,7 +572,7 @@ static void process_agent_intervention(QueueReactive* env) {
         if (type == QR_ACTION_LIMIT || type == QR_ACTION_IMPROVE) {
             int slot = first_free_slot(env);
             if (slot < 0) {
-                env->last_action_rejected = 1;
+                env->last_action.rejected = 1;
                 env->log.agent_rejected += 1.0f;
                 return;
             }
@@ -580,7 +580,7 @@ static void process_agent_intervention(QueueReactive* env) {
             int price = level_price(lob, side, level_or_slot);
             if (type == QR_ACTION_IMPROVE) {
                 if (lob.spread() <= 1) {
-                    env->last_action_rejected = 1;
+                    env->last_action.rejected = 1;
                     env->log.agent_rejected += 1.0f;
                     return;
                 }
@@ -593,39 +593,39 @@ static void process_agent_intervention(QueueReactive* env) {
                 }
             }
             int ahead = type == QR_ACTION_LIMIT ? safe_volume_at(lob, passive_side(side), price) : 0;
-            qr::Order add(order_type, passive_side(side), price, size, env->time_ns);
+            qr::Order add(order_type, passive_side(side), price, size, env->clock.time_ns);
             lob.process(add);
             if (add.rejected) {
-                env->last_action_rejected = 1;
+                env->last_action.rejected = 1;
                 env->log.agent_rejected += 1.0f;
                 return;
             }
-            env->orders[slot] = {1, side, price, size, ahead, env->next_order_id++};
-            env->last_action_price = price;
+            env->own.orders[slot] = {1, side, price, size, ahead, env->own.next_order_id++};
+            env->last_action.price = price;
             env->log.agent_orders += 1.0f;
             return;
         }
 
         if (type == QR_ACTION_MARKET) {
             int price = market_limit_price(lob, side, level_or_slot);
-            qr::Order order(qr::OrderType::Trade, trade_side(side), price, size, env->time_ns);
+            qr::Order order(qr::OrderType::Trade, trade_side(side), price, size, env->clock.time_ns);
             std::vector<qr::Fill> fills;
             lob.process(order, &fills);
             int fill = filled_size(fills);
             int resting_side = side == QR_SIDE_BUY ? QR_SIDE_SELL : QR_SIDE_BUY;
             for (const auto& f : fills) apply_passive_fills(env, resting_side, f.price, f.size);
             update_inventory_from_aggressive_fills(env, side, fills);
-            env->last_action_filled = fill;
-            env->last_action_price = fill > 0
+            env->last_action.filled = fill;
+            env->last_action.price = fill > 0
                 ? static_cast<int>(std::llround([&]() {
                     double notional = 0.0;
                     for (const auto& f : fills) notional += static_cast<double>(f.price) * f.size;
                     return notional / std::max(1, fill);
                 }()))
                 : price;
-            env->last_action_partial = fill < size;
+            env->last_action.partial = fill < size;
             if (fill == 0) {
-                env->last_action_rejected = 1;
+                env->last_action.rejected = 1;
                 env->log.agent_rejected += 1.0f;
             }
             maybe_add_residual_order(env, side, order, fill);
@@ -635,8 +635,8 @@ static void process_agent_intervention(QueueReactive* env) {
             if (fill > 0) env->log.agent_fills += 1.0f;
         }
     } catch (...) {
-        env->last_action_rejected = 1;
-        env->config_error = 1;
+        env->last_action.rejected = 1;
+        env->status.config_error = 1;
         env->log.agent_rejected += 1.0f;
     }
 }
@@ -644,12 +644,12 @@ static void process_agent_intervention(QueueReactive* env) {
 static void process_qr_order(QueueReactive* env, qr::Order order) {
     QRSim* s = sim(env);
     qr::OrderBook& lob = *s->lob;
-    env->last_qr_type = static_cast<int>(order.type);
-    env->last_qr_side = agent_side(order.side);
-    env->last_qr_size = order.size;
-    env->last_qr_price = order.price;
-    env->last_qr_rejected = 0;
-    env->last_qr_partial = 0;
+    env->last_qr.type = static_cast<int>(order.type);
+    env->last_qr.side = agent_side(order.side);
+    env->last_qr.size = order.size;
+    env->last_qr.price = order.price;
+    env->last_qr.rejected = 0;
+    env->last_qr.partial = 0;
     try {
         if (order.type == qr::OrderType::Cancel) {
             int side = agent_side(order.side);
@@ -658,7 +658,7 @@ static void process_qr_order(QueueReactive* env, qr::Order order) {
             int public_volume = std::max(0, level_volume - own);
             order.size = std::min(order.size, public_volume);
             if (order.size <= 0) {
-                env->last_qr_rejected = 1;
+                env->last_qr.rejected = 1;
                 return;
             }
             std::array<int, QR_MAX_ORDERS> ahead_decrements{};
@@ -674,17 +674,17 @@ static void process_qr_order(QueueReactive* env, qr::Order order) {
                 apply_passive_fills(env, agent_side(order.side), f.price, f.size);
             }
             if (s->impact && fill > 0) s->impact->add_trade(order.side, fill);
-            env->last_qr_partial = fill < order.size;
+            env->last_qr.partial = fill < order.size;
             env->log.qr_trades += fill > 0 ? 1.0f : 0.0f;
         } else {
             lob.process(order);
         }
-        env->last_qr_rejected = order.rejected ? 1 : 0;
-        env->last_qr_partial = order.partial ? 1 : env->last_qr_partial;
+        env->last_qr.rejected = order.rejected ? 1 : 0;
+        env->last_qr.partial = order.partial ? 1 : env->last_qr.partial;
         env->log.qr_events += 1.0f;
     } catch (...) {
-        env->last_qr_rejected = 1;
-        env->config_error = 1;
+        env->last_qr.rejected = 1;
+        env->status.config_error = 1;
     }
 }
 
@@ -696,20 +696,20 @@ static bool wants_intervention(QueueReactive* env) {
 static void record_submitted_action(QueueReactive* env) {
     int type = clamp_int(static_cast<int>(env->actions[0]), QR_ACTION_NOOP, QR_ACTION_IMPROVE);
     int side = static_cast<int>(env->actions[1]) == QR_SIDE_SELL ? QR_SIDE_SELL : QR_SIDE_BUY;
-    env->last_action_type = type;
-    env->last_action_side = side;
-    env->last_action_rejected = 0;
-    env->last_action_partial = 0;
-    env->last_action_filled = 0;
-    env->last_action_price = 0;
-    env->last_action_lost_race = 0;
+    env->last_action.type = type;
+    env->last_action.side = side;
+    env->last_action.rejected = 0;
+    env->last_action.partial = 0;
+    env->last_action.filled = 0;
+    env->last_action.price = 0;
+    env->last_action.lost_race = 0;
 }
 
 static void advance_models(QueueReactive* env, int64_t dt) {
     QRSim* s = sim(env);
-    env->time_ns += dt;
+    env->clock.time_ns += dt;
     if (s->alpha) s->alpha->step(dt);
-    if (s->impact) s->impact->step(env->time_ns);
+    if (s->impact) s->impact->step(env->clock.time_ns);
 }
 
 static float compute_reward(QueueReactive* env) {
@@ -736,44 +736,44 @@ static void compute_observations(QueueReactive* env) {
         env->observations[idx++] = static_cast<float>(safe_volume_at(lob, qr::Side::Ask, ask)) / VOLUME_NORM;
     }
 
-    double pnl = env->cash + static_cast<double>(env->inventory) * mid;
+    double pnl = env->account.cash + static_cast<double>(env->account.inventory) * mid;
     int active_orders = 0;
-    for (const auto& order : env->orders) active_orders += order.active ? 1 : 0;
-    env->last_alpha = s->alpha ? s->alpha->value() : 0.0;
-    env->last_impact_bias = s->impact ? s->impact->bias_factor() : 0.0;
+    for (const auto& order : env->own.orders) active_orders += order.active ? 1 : 0;
+    env->status.last_alpha = s->alpha ? s->alpha->value() : 0.0;
+    env->status.last_impact_bias = s->impact ? s->impact->bias_factor() : 0.0;
 
     env->observations[idx++] = static_cast<float>(lob.spread()) / PRICE_NORM;
     env->observations[idx++] = static_cast<float>(lob.imbalance());
-    env->observations[idx++] = static_cast<float>(env->inventory) / INVENTORY_NORM;
-    env->observations[idx++] = static_cast<float>(env->cash / CASH_NORM);
+    env->observations[idx++] = static_cast<float>(env->account.inventory) / INVENTORY_NORM;
+    env->observations[idx++] = static_cast<float>(env->account.cash / CASH_NORM);
     env->observations[idx++] = static_cast<float>(pnl / CASH_NORM);
-    env->observations[idx++] = static_cast<float>(env->last_alpha);
-    env->observations[idx++] = static_cast<float>(env->last_impact_bias);
-    env->observations[idx++] = static_cast<float>(env->last_qr_dt / 1e9);
-    env->observations[idx++] = static_cast<float>(env->last_latency_dt / 1e9);
-    env->observations[idx++] = static_cast<float>((env->time_ns % 1000000000LL) / 1e9);
-    env->observations[idx++] = static_cast<float>(env->last_action_filled) / VOLUME_NORM;
+    env->observations[idx++] = static_cast<float>(env->status.last_alpha);
+    env->observations[idx++] = static_cast<float>(env->status.last_impact_bias);
+    env->observations[idx++] = static_cast<float>(env->clock.last_qr_dt / 1e9);
+    env->observations[idx++] = static_cast<float>(env->clock.last_latency_dt / 1e9);
+    env->observations[idx++] = static_cast<float>((env->clock.time_ns % 1000000000LL) / 1e9);
+    env->observations[idx++] = static_cast<float>(env->last_action.filled) / VOLUME_NORM;
     env->observations[idx++] = static_cast<float>(active_orders) / static_cast<float>(QR_MAX_ORDERS);
 
-    env->observations[idx++] = static_cast<float>(env->last_action_type) / static_cast<float>(QR_NUM_ACTION_TYPES - 1);
-    env->observations[idx++] = env->last_action_side == QR_SIDE_BUY ? 1.0f : -1.0f;
-    env->observations[idx++] = static_cast<float>(env->last_action_rejected);
-    env->observations[idx++] = static_cast<float>(env->last_action_partial);
-    env->observations[idx++] = static_cast<float>(env->last_action_lost_race);
-    env->observations[idx++] = env->last_action_price == 0
+    env->observations[idx++] = static_cast<float>(env->last_action.type) / static_cast<float>(QR_NUM_ACTION_TYPES - 1);
+    env->observations[idx++] = env->last_action.side == QR_SIDE_BUY ? 1.0f : -1.0f;
+    env->observations[idx++] = static_cast<float>(env->last_action.rejected);
+    env->observations[idx++] = static_cast<float>(env->last_action.partial);
+    env->observations[idx++] = static_cast<float>(env->last_action.lost_race);
+    env->observations[idx++] = env->last_action.price == 0
         ? 0.0f
-        : (static_cast<float>(env->last_action_price) - mid) / PRICE_NORM;
-    env->observations[idx++] = static_cast<float>(env->last_qr_type) / 4.0f;
-    env->observations[idx++] = env->last_qr_side == QR_SIDE_BUY ? 1.0f : -1.0f;
-    env->observations[idx++] = static_cast<float>(env->last_qr_size) / VOLUME_NORM;
-    env->observations[idx++] = env->last_qr_price == 0
+        : (static_cast<float>(env->last_action.price) - mid) / PRICE_NORM;
+    env->observations[idx++] = static_cast<float>(env->last_qr.type) / 4.0f;
+    env->observations[idx++] = env->last_qr.side == QR_SIDE_BUY ? 1.0f : -1.0f;
+    env->observations[idx++] = static_cast<float>(env->last_qr.size) / VOLUME_NORM;
+    env->observations[idx++] = env->last_qr.price == 0
         ? 0.0f
-        : (static_cast<float>(env->last_qr_price) - mid) / PRICE_NORM;
-    env->observations[idx++] = static_cast<float>(env->last_qr_rejected);
-    env->observations[idx++] = static_cast<float>(env->last_qr_partial);
+        : (static_cast<float>(env->last_qr.price) - mid) / PRICE_NORM;
+    env->observations[idx++] = static_cast<float>(env->last_qr.rejected);
+    env->observations[idx++] = static_cast<float>(env->last_qr.partial);
 
     for (int i = 0; i < QR_MAX_ORDERS; i++) {
-        const QRAgentOrder& order = env->orders[i];
+        const QRAgentOrder& order = env->own.orders[i];
         env->observations[idx++] = static_cast<float>(order.active);
         env->observations[idx++] = order.side == QR_SIDE_BUY ? 1.0f : -1.0f;
         env->observations[idx++] = (static_cast<float>(order.price) - mid) / PRICE_NORM;
@@ -811,7 +811,7 @@ static const char* side_name(int side) {
 static int active_order_count(const QueueReactive* env) {
     int count = 0;
     for (int i = 0; i < QR_MAX_ORDERS; i++) {
-        count += env->orders[i].active ? 1 : 0;
+        count += env->own.orders[i].active ? 1 : 0;
     }
     return count;
 }
@@ -886,7 +886,7 @@ static void draw_queue_reactive_render(QueueReactive* env) {
     const Color text = (Color){232, 236, 242, 255};
     const Color muted = (Color){145, 157, 172, 255};
     const Color accent = (Color){243, 190, 87, 255};
-    const Color warning = env->config_error ? (Color){255, 143, 150, 255} : (Color){112, 224, 185, 255};
+    const Color warning = env->status.config_error ? (Color){255, 143, 150, 255} : (Color){112, 224, 185, 255};
 
     BeginDrawing();
     ClearBackground(bg);
@@ -894,13 +894,13 @@ static void draw_queue_reactive_render(QueueReactive* env) {
     DrawText("queue_reactive", margin, 24, 28, text);
     DrawText(TextFormat(
         "step %d   t %.6fs   mid %.1f   spread %d   imbalance %.3f",
-        env->step,
-        (double)env->time_ns / 1e9,
+        env->clock.step,
+        (double)env->clock.time_ns / 1e9,
         mid,
         lob.spread(),
         lob.imbalance()
     ), margin, 56, 18, muted);
-    DrawText(env->calibration_loaded ? "calibrated" : "static params", width - 190, 28, 18, warning);
+    DrawText(env->status.calibration_loaded ? "calibrated" : "static params", width - 190, 28, 18, warning);
 
     DrawLine(center_x, ladder_y - 12, center_x, ladder_y + row_h * (QR_LEVELS * 2 + 1) + 12, border);
     DrawText("VOLUME", center_x - 230, ladder_y - 28, 16, muted);
@@ -939,27 +939,27 @@ static void draw_queue_reactive_render(QueueReactive* env) {
 
     DrawText("last market event", (int)left.x + 18, (int)left.y + 14, 19, text);
     DrawText(TextFormat("%s %s   price %d   size %d",
-        qr_event_name(env->last_qr_type),
-        side_name(env->last_qr_side),
-        env->last_qr_price,
-        env->last_qr_size
+        qr_event_name(env->last_qr.type),
+        side_name(env->last_qr.side),
+        env->last_qr.price,
+        env->last_qr.size
     ), (int)left.x + 18, (int)left.y + 42, 18, muted);
     DrawText(TextFormat("dt %.6fs   rejected %d   partial %d",
-        (double)env->last_qr_dt / 1e9,
-        env->last_qr_rejected,
-        env->last_qr_partial
+        (double)env->clock.last_qr_dt / 1e9,
+        env->last_qr.rejected,
+        env->last_qr.partial
     ), (int)left.x + 18, (int)left.y + 68, 18, muted);
 
     DrawText("agent state", (int)right.x + 18, (int)right.y + 14, 19, text);
     DrawText(TextFormat("%s %s   price %d   filled %d",
-        agent_action_name(env->last_action_type),
-        side_name(env->last_action_side),
-        env->last_action_price,
-        env->last_action_filled
+        agent_action_name(env->last_action.type),
+        side_name(env->last_action.side),
+        env->last_action.price,
+        env->last_action.filled
     ), (int)right.x + 18, (int)right.y + 42, 18, muted);
     DrawText(TextFormat("inventory %d   cash %.0f   active orders %d",
-        env->inventory,
-        env->cash,
+        env->account.inventory,
+        env->account.cash,
         active_order_count(env)
     ), (int)right.x + 18, (int)right.y + 68, 18, muted);
 
@@ -1016,17 +1016,16 @@ void qr_config_defaults(QRConfig* config) {
 void qr_configure(QueueReactive* env, const QRConfig* config) {
     c_close(env);
     env->sim = nullptr;
-    env->configured = 1;
-    env->config_error = 0;
+    env->status.config_error = 0;
     try {
         env->sim = new QRSim(*config, env->rng ? env->rng : 1);
-        env->calibration_loaded = sim(env)->calibrated_loaded ? 1 : 0;
+        env->status.calibration_loaded = sim(env)->calibrated_loaded ? 1 : 0;
     } catch (...) {
         QRConfig fallback;
         qr_config_defaults(&fallback);
         env->sim = new QRSim(fallback, env->rng ? env->rng : 1);
-        env->calibration_loaded = 0;
-        env->config_error = 1;
+        env->status.calibration_loaded = 0;
+        env->status.config_error = 1;
     }
 }
 
@@ -1038,33 +1037,33 @@ void c_reset(QueueReactive* env) {
     }
     QRSim* s = sim(env);
     s->reset_book();
-    for (auto& order : env->orders) order = {};
-    env->step = 0;
-    env->next_order_id = 1;
-    env->inventory = 0;
-    env->cash = 0.0;
-    env->time_ns = 0;
-    env->last_qr_dt = 0;
-    env->last_latency_dt = 0;
-    env->last_action_type = QR_ACTION_NOOP;
-    env->last_action_side = QR_SIDE_BUY;
-    env->last_action_rejected = 0;
-    env->last_action_partial = 0;
-    env->last_action_filled = 0;
-    env->last_action_price = s->cfg.initial_bid;
-    env->last_action_lost_race = 0;
-    env->last_qr_type = QR_ACTION_NOOP;
-    env->last_qr_side = QR_SIDE_BUY;
-    env->last_qr_size = 0;
-    env->last_qr_price = s->cfg.initial_bid;
-    env->last_qr_rejected = 0;
-    env->last_qr_partial = 0;
+    for (auto& order : env->own.orders) order = {};
+    env->clock.step = 0;
+    env->own.next_order_id = 1;
+    env->account.inventory = 0;
+    env->account.cash = 0.0;
+    env->clock.time_ns = 0;
+    env->clock.last_qr_dt = 0;
+    env->clock.last_latency_dt = 0;
+    env->last_action.type = QR_ACTION_NOOP;
+    env->last_action.side = QR_SIDE_BUY;
+    env->last_action.rejected = 0;
+    env->last_action.partial = 0;
+    env->last_action.filled = 0;
+    env->last_action.price = s->cfg.initial_bid;
+    env->last_action.lost_race = 0;
+    env->last_qr.type = QR_ACTION_NOOP;
+    env->last_qr.side = QR_SIDE_BUY;
+    env->last_qr.size = 0;
+    env->last_qr.price = s->cfg.initial_bid;
+    env->last_qr.rejected = 0;
+    env->last_qr.partial = 0;
     compute_observations(env);
 }
 
 void c_step(QueueReactive* env) {
     QRSim* s = sim(env);
-    env->step++;
+    env->clock.step++;
     env->rewards[0] = 0.0f;
     env->terminals[0] = 0.0f;
     record_submitted_action(env);
@@ -1075,27 +1074,27 @@ void c_step(QueueReactive* env) {
     double total_bias = -alpha_scale * alpha_val + impact_val;
     s->model->bias(total_bias);
 
-    qr::Order qr_order = s->model->sample_order(env->time_ns);
+    qr::Order qr_order = s->model->sample_order(env->clock.time_ns);
     int64_t dt_qr = s->model->sample_dt(s->model->last_event());
     int64_t dt_agent = wants_intervention(env)
         ? s->latency.sample(s->latency_rng)
         : std::numeric_limits<int64_t>::max();
-    env->last_qr_dt = dt_qr;
-    env->last_latency_dt = dt_agent == std::numeric_limits<int64_t>::max() ? 0 : dt_agent;
+    env->clock.last_qr_dt = dt_qr;
+    env->clock.last_latency_dt = dt_agent == std::numeric_limits<int64_t>::max() ? 0 : dt_agent;
 
     if (wants_intervention(env) && dt_agent < dt_qr) {
         advance_models(env, dt_agent);
         process_agent_intervention(env);
         advance_models(env, dt_qr - dt_agent);
-        qr_order.ts = env->time_ns;
+        qr_order.ts = env->clock.time_ns;
         process_qr_order(env, qr_order);
     } else {
         if (wants_intervention(env)) {
-            env->last_action_lost_race = 1;
+            env->last_action.lost_race = 1;
             env->log.agent_lost_race += 1.0f;
         }
         advance_models(env, dt_qr);
-        qr_order.ts = env->time_ns;
+        qr_order.ts = env->clock.time_ns;
         process_qr_order(env, qr_order);
     }
 
@@ -1105,7 +1104,7 @@ void c_step(QueueReactive* env) {
 
     env->log.episode_length += 1.0f;
     env->log.episode_return += env->rewards[0];
-    env->log.inventory += std::fabs(static_cast<float>(env->inventory));
+    env->log.inventory += std::fabs(static_cast<float>(env->account.inventory));
     env->log.score += env->rewards[0];
     env->log.perf += 0.0f;
     env->log.n += 1.0f;

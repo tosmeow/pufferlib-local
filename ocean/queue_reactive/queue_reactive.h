@@ -85,6 +85,50 @@ typedef struct {
 } QRAgentOrder;
 
 typedef struct {
+    QRAgentOrder orders[QR_MAX_ORDERS];
+    int next_order_id;
+} QROwnOrders;
+
+typedef struct {
+    int inventory;
+    double cash;
+} QRAgentAccount;
+
+typedef struct {
+    int type;
+    int side;
+    int rejected;
+    int partial;
+    int filled;
+    int price;
+    int lost_race;
+} QRActionTrace;
+
+typedef struct {
+    int type;
+    int side;
+    int size;
+    int price;
+    int rejected;
+    int partial;
+} QREventTrace;
+
+typedef struct {
+    int step;
+    int64_t time_ns;
+    int64_t last_qr_dt;
+    int64_t last_latency_dt;
+} QRClock;
+
+typedef struct {
+    int config_error;
+    int calibration_loaded;
+    double last_alpha;
+    double last_impact_bias;
+} QRRuntimeStatus;
+
+typedef struct {
+    // Puffer vector-env ABI fields. vecenv.h writes these directly.
     Log log;
     float* observations;
     float* actions;
@@ -93,34 +137,15 @@ typedef struct {
     int num_agents;
     unsigned int rng;
 
+    // Opaque C++ simulator internals live in queue_reactive.cpp.
     void* sim;
-    QRAgentOrder orders[QR_MAX_ORDERS];
 
-    int step;
-    int configured;
-    int config_error;
-    int calibration_loaded;
-    int next_order_id;
-    int inventory;
-    int last_action_type;
-    int last_action_side;
-    int last_action_rejected;
-    int last_action_partial;
-    int last_action_filled;
-    int last_action_price;
-    int last_action_lost_race;
-    int last_qr_type;
-    int last_qr_side;
-    int last_qr_size;
-    int last_qr_price;
-    int last_qr_rejected;
-    int last_qr_partial;
-    int64_t time_ns;
-    int64_t last_qr_dt;
-    int64_t last_latency_dt;
-    double cash;
-    double last_alpha;
-    double last_impact_bias;
+    QROwnOrders own;
+    QRAgentAccount account;
+    QRActionTrace last_action;
+    QREventTrace last_qr;
+    QRClock clock;
+    QRRuntimeStatus status;
 } QueueReactive;
 
 #ifdef __cplusplus
