@@ -69,7 +69,11 @@ struct LatencyModel {
 };
 
 struct QRSim {
-    explicit QRSim(const QRConfig& cfg, uint64_t seed) : cfg(cfg), seed(seed), latency_rng(seed ^ 0x9e3779b97f4a7c15ULL) {
+    explicit QRSim(const QRConfig& cfg, uint64_t seed)
+        : cfg(cfg),
+          seed(seed),
+          latency_rng(seed ^ 0x9e3779b97f4a7c15ULL),
+          queue_rng(seed ^ 0xd1b54a32d192ed03ULL) {
         params_path = cfg.params_path ? cfg.params_path : "";
         latency_path = cfg.latency_path ? cfg.latency_path : "";
         setup_static_models();
@@ -91,6 +95,7 @@ struct QRSim {
     std::unique_ptr<qr::Alpha> alpha;
     LatencyModel latency;
     std::mt19937_64 latency_rng;
+    std::mt19937_64 queue_rng;
     std::array<int32_t, QR_LEVELS> mes{1, 1, 1, 1};
     bool calibrated_loaded = false;
 
@@ -314,6 +319,47 @@ static int first_free_slot(QueueReactive* env) {
     return -1;
 }
 
+static int collect_orders_at(
+        QueueReactive* env,
+        int side,
+        int price,
+        std::array<int, QR_MAX_ORDERS>& slots) {
+    int count = 0;
+    for (int i = 0; i < QR_MAX_ORDERS; i++) {
+        const QRAgentOrder& order = env->orders[i];
+        if (order.active && order.side == side && order.price == price) {
+            slots[count++] = i;
+        }
+    }
+
+    std::sort(slots.begin(), slots.begin() + count, [&](int a, int b) {
+        const QRAgentOrder& lhs = env->orders[a];
+        const QRAgentOrder& rhs = env->orders[b];
+        if (lhs.ahead != rhs.ahead) return lhs.ahead < rhs.ahead;
+        return lhs.id < rhs.id;
+    });
+    return count;
+}
+
+static bool worse_agent_order(const QRAgentOrder& candidate, const QRAgentOrder& incumbent) {
+    if (candidate.price != incumbent.price) {
+        if (candidate.side == QR_SIDE_BUY) return candidate.price < incumbent.price;
+        return candidate.price > incumbent.price;
+    }
+    if (candidate.ahead != incumbent.ahead) return candidate.ahead > incumbent.ahead;
+    return candidate.id > incumbent.id;
+}
+
+static int worst_order_slot(QueueReactive* env, int side) {
+    int slot = -1;
+    for (int i = 0; i < QR_MAX_ORDERS; i++) {
+        const QRAgentOrder& order = env->orders[i];
+        if (!order.active || order.side != side) continue;
+        if (slot < 0 || worse_agent_order(order, env->orders[slot])) slot = i;
+    }
+    return slot;
+}
+
 static void reduce_orders_behind(QueueReactive* env, int side, int price, int order_id, int qty) {
     if (qty <= 0) return;
     for (int i = 0; i < QR_MAX_ORDERS; i++) {
@@ -343,9 +389,11 @@ static void fill_agent_order(QueueReactive* env, QRAgentOrder& order, int fill_s
 
 static void apply_passive_fills(QueueReactive* env, int resting_side, int price, int traded) {
     int remaining_trade = traded;
-    for (int i = 0; i < QR_MAX_ORDERS && remaining_trade > 0; i++) {
-        QRAgentOrder& order = env->orders[i];
-        if (!order.active || order.side != resting_side || order.price != price) continue;
+    std::array<int, QR_MAX_ORDERS> slots{};
+    int count = collect_orders_at(env, resting_side, price, slots);
+    for (int i = 0; i < count && remaining_trade > 0; i++) {
+        QRAgentOrder& order = env->orders[slots[i]];
+        if (!order.active) continue;
         int ahead_take = std::min(remaining_trade, order.ahead);
         order.ahead -= ahead_take;
         remaining_trade -= ahead_take;
@@ -353,6 +401,68 @@ static void apply_passive_fills(QueueReactive* env, int resting_side, int price,
         int fill = std::min(remaining_trade, order.remaining);
         remaining_trade -= fill;
         fill_agent_order(env, order, fill);
+    }
+}
+
+static int sample_public_cancel_segment(
+        std::mt19937_64& rng,
+        int segment,
+        int remaining_public,
+        int remaining_cancel) {
+    if (segment <= 0 || remaining_public <= 0 || remaining_cancel <= 0) return 0;
+    if (segment >= remaining_public) return remaining_cancel;
+    double p = static_cast<double>(segment) / static_cast<double>(remaining_public);
+    std::binomial_distribution<int> binom(remaining_cancel, p);
+    return std::min(segment, binom(rng));
+}
+
+static void sample_public_cancel_decrements(
+        QueueReactive* env,
+        QRSim* s,
+        int side,
+        int price,
+        int level_volume,
+        int cancel_size,
+        std::array<int, QR_MAX_ORDERS>& ahead_decrements) {
+    // The QR book is aggregate, so infer public queue segments around our
+    // fixed-size own-order overlay and sample where public cancels landed.
+    ahead_decrements.fill(0);
+    if (cancel_size <= 0 || level_volume <= 0) return;
+
+    int own_total = own_remaining_at(env, side, price);
+    int public_total = std::max(0, level_volume - own_total);
+    int remaining_cancel = std::min(cancel_size, public_total);
+    if (remaining_cancel <= 0) return;
+
+    std::array<int, QR_MAX_ORDERS> slots{};
+    int count = collect_orders_at(env, side, price, slots);
+    if (count == 0) return;
+
+    int remaining_public = public_total;
+    int previous_end = 0;
+    int prefix_cancel = 0;
+    for (int i = 0; i < count; i++) {
+        QRAgentOrder& order = env->orders[slots[i]];
+        int order_ahead = clamp_int(order.ahead, 0, level_volume);
+        int public_segment = std::max(0, order_ahead - previous_end);
+        public_segment = std::min(public_segment, remaining_public);
+        int segment_cancel = sample_public_cancel_segment(
+            s->queue_rng, public_segment, remaining_public, remaining_cancel);
+
+        prefix_cancel += segment_cancel;
+        remaining_cancel -= segment_cancel;
+        remaining_public -= public_segment;
+        ahead_decrements[slots[i]] = std::min(order.ahead, prefix_cancel);
+        previous_end = std::max(previous_end, order_ahead + order.remaining);
+    }
+}
+
+static void apply_ahead_decrements(
+        QueueReactive* env,
+        const std::array<int, QR_MAX_ORDERS>& ahead_decrements) {
+    for (int i = 0; i < QR_MAX_ORDERS; i++) {
+        if (!env->orders[i].active || ahead_decrements[i] <= 0) continue;
+        env->orders[i].ahead = std::max(0, env->orders[i].ahead - ahead_decrements[i]);
     }
 }
 
@@ -392,6 +502,47 @@ static void maybe_add_residual_order(
     env->log.agent_orders += 1.0f;
 }
 
+static void cancel_worst_agent_order(QueueReactive* env) {
+    // First-attempt agent cancel logic. This is deliberately shaky: for now a
+    // cancel action only chooses a side and we pop the worst-positioned order.
+    // Eventually cancellation should be an explicit agent-controlled target
+    // over own order id/slot, not this env-side heuristic.
+    QRSim* s = sim(env);
+    qr::OrderBook& lob = *s->lob;
+    int side = env->last_action_side;
+    int slot = worst_order_slot(env, side);
+    if (slot < 0) {
+        env->last_action_rejected = 1;
+        env->log.agent_rejected += 1.0f;
+        return;
+    }
+
+    QRAgentOrder& own = env->orders[slot];
+    int original_remaining = own.remaining;
+    int level_volume = safe_volume_at(lob, passive_side(side), own.price);
+    int cancel_size = std::min(own.remaining, level_volume);
+    if (cancel_size <= 0) {
+        env->last_action_rejected = 1;
+        env->log.agent_rejected += 1.0f;
+        own = {};
+        return;
+    }
+    qr::Order cancel(qr::OrderType::Cancel, passive_side(side), own.price, cancel_size, env->time_ns);
+    lob.process(cancel);
+    if (cancel.rejected) {
+        env->last_action_rejected = 1;
+        env->log.agent_rejected += 1.0f;
+        return;
+    }
+
+    reduce_orders_behind(env, own.side, own.price, own.id, cancel_size);
+    env->last_action_price = own.price;
+    env->last_action_partial = cancel.partial ? 1 : 0;
+    own.remaining -= cancel_size;
+    if (own.remaining <= 0 || cancel.partial || cancel_size < original_remaining) own = {};
+    env->log.agent_cancels += 1.0f;
+}
+
 static void process_agent_intervention(QueueReactive* env) {
     QRSim* s = sim(env);
     qr::OrderBook& lob = *s->lob;
@@ -411,19 +562,10 @@ static void process_agent_intervention(QueueReactive* env) {
 
     try {
         if (type == QR_ACTION_CANCEL) {
-            int slot = clamp_int(level_or_slot, 0, QR_MAX_ORDERS - 1);
-            QRAgentOrder& own = env->orders[slot];
-            if (!own.active || own.side != side) {
-                env->last_action_rejected = 1;
-                env->log.agent_rejected += 1.0f;
-                return;
-            }
-            qr::Order cancel(qr::OrderType::Cancel, passive_side(side), own.price, own.remaining, env->time_ns);
-            lob.process(cancel);
-            reduce_orders_behind(env, own.side, own.price, own.id, own.remaining);
-            env->last_action_price = own.price;
-            own = {};
-            env->log.agent_cancels += 1.0f;
+            // Price/slot action input is ignored for now. See
+            // cancel_worst_agent_order for the temporary policy.
+            (void)level_or_slot;
+            cancel_worst_agent_order(env);
             return;
         }
 
@@ -499,18 +641,6 @@ static void process_agent_intervention(QueueReactive* env) {
     }
 }
 
-static void reduce_ahead_from_public_cancel(QueueReactive* env, const qr::Order& cancel, int canceled) {
-    int side = agent_side(cancel.side);
-    int remaining_cancel = canceled;
-    for (int i = 0; i < QR_MAX_ORDERS && remaining_cancel > 0; i++) {
-        QRAgentOrder& order = env->orders[i];
-        if (!order.active || order.side != side || order.price != cancel.price) continue;
-        int dec = std::min(remaining_cancel, order.ahead);
-        order.ahead -= dec;
-        remaining_cancel -= dec;
-    }
-}
-
 static void process_qr_order(QueueReactive* env, qr::Order order) {
     QRSim* s = sim(env);
     qr::OrderBook& lob = *s->lob;
@@ -522,15 +652,20 @@ static void process_qr_order(QueueReactive* env, qr::Order order) {
     env->last_qr_partial = 0;
     try {
         if (order.type == qr::OrderType::Cancel) {
-            int own = own_remaining_at(env, agent_side(order.side), order.price);
-            int public_volume = std::max(0, safe_volume_at(lob, order.side, order.price) - own);
+            int side = agent_side(order.side);
+            int level_volume = safe_volume_at(lob, order.side, order.price);
+            int own = own_remaining_at(env, side, order.price);
+            int public_volume = std::max(0, level_volume - own);
             order.size = std::min(order.size, public_volume);
             if (order.size <= 0) {
                 env->last_qr_rejected = 1;
                 return;
             }
+            std::array<int, QR_MAX_ORDERS> ahead_decrements{};
+            sample_public_cancel_decrements(
+                env, s, side, order.price, level_volume, order.size, ahead_decrements);
             lob.process(order);
-            reduce_ahead_from_public_cancel(env, order, order.size);
+            apply_ahead_decrements(env, ahead_decrements);
         } else if (order.type == qr::OrderType::Trade) {
             std::vector<qr::Fill> fills;
             lob.process(order, &fills);
