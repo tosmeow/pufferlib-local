@@ -19,8 +19,8 @@ To see the valid options for an environment:
 
    .venv/bin/puffer train breakout --help
 
-Local CPU Training
-------------------
+Local PyTorch Training
+----------------------
 
 On this Mac, the practical local path is:
 
@@ -29,9 +29,24 @@ On this Mac, the practical local path is:
    puffer build breakout
    .venv/bin/puffer train breakout --slowly
 
-``--slowly`` means: use the compiled CPU vector environment plus the PyTorch
-training backend. This is good for debugging, reading, and smoke testing. It is
-not the headline high-performance CUDA path.
+``--slowly`` means: use the PyTorch training backend. Its default
+``--torch.device auto`` selection prefers CUDA, then Apple MPS, then CPU. With
+an Apple Silicon ``--cpu`` build, the vector environment remains on CPU and
+the policy, rollout tensors, advantage calculation, and optimizer run on MPS.
+Use ``--torch.device cpu`` to force the CPU baseline.
+
+Apple MPS Training
+------------------
+
+Build the CPU vector backend, then run the PyTorch trainer:
+
+.. code-block:: bash
+
+   puffer build breakout
+   puffer train breakout --slowly --torch.device mps
+
+``auto`` selects the same device when MPS is available. MPS accelerates the
+PyTorch trainer; the custom native kernels in ``src/*.cu`` remain CUDA-only.
 
 CUDA/GPU Training
 -----------------

@@ -17,7 +17,8 @@ Quick Start
    puffer build breakout
    .venv/bin/puffer train breakout --slowly
 
-On Apple Silicon, use ``--slowly`` for local smoke tests. The CUDA-native path is
+On Apple Silicon, ``--slowly`` uses MPS automatically when available. The
+CUDA-native path is
 for Linux/NVIDIA machines, ideally via PufferTank.
 
 Contents
@@ -32,6 +33,8 @@ Contents
    configuration
    examples
    api/index
+
+* :download:`Training algorithms: CPU and GPU code map (Markdown) <training_code_map.md>`
 
 Useful Links
 ------------

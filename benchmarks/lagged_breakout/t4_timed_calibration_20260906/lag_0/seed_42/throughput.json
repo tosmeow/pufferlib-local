@@ -1,0 +1,427 @@
+{
+  "measurements": [
+    {
+      "agents": 4096,
+      "minibatch_size": 16384,
+      "threads": 1,
+      "seconds": 1.2100324540000003,
+      "steps_per_second": 649926.3696608255,
+      "metrics": {
+        "SPS": 353814.9513557051,
+        "agent_steps": 1048576,
+        "uptime": 2.9636292457580566,
+        "epoch": 4,
+        "env": {
+          "perf": 0.003512951545417309,
+          "score": 3.0351648330688477,
+          "episode_return": 3.0351648330688477,
+          "episode_length": 834.5867919921875,
+          "action_switch_rate": 0.4676031768321991,
+          "paddle_distance": 1939.2152099609375,
+          "n": 1365.0
+        },
+        "loss": {
+          "policy_loss": 0.0035274834795431657,
+          "value_loss": 0.01812375540083105,
+          "entropy": 0.7805516503073953,
+          "old_approx_kl": 0.008363244208422575,
+          "approx_kl": 0.00815174322236668,
+          "clipfrac": 2.774325284090909e-05,
+          "importance": 0.999788370999423,
+          "explained_variance": 0.6918923854827881
+        },
+        "perf": {
+          "rollout": 1.3608240814208985,
+          "eval_gpu": 1.0286762540340424,
+          "eval_env": 0.32340627181529996,
+          "train": 1.5616427764892578,
+          "train_misc": 0.0,
+          "train_forward": 0.3396546239852905
+        },
+        "util": {
+          "gpu_percent": 59.0,
+          "gpu_mem": 7.592366695404053,
+          "vram_used_gb": 0.7020263671875,
+          "vram_total_gb": 14.56317138671875,
+          "cpu_mem_gb": 5.59393310546875
+        }
+      }
+    },
+    {
+      "agents": 8192,
+      "minibatch_size": 32768,
+      "threads": 1,
+      "seconds": 1.9454297569999994,
+      "steps_per_second": 808491.7969104553,
+      "metrics": {
+        "SPS": 799854.0911165667,
+        "agent_steps": 2097152,
+        "uptime": 2.6219193935394287,
+        "epoch": 4,
+        "env": {
+          "perf": 0.003431950230151415,
+          "score": 2.9651541709899902,
+          "episode_return": 2.9651541709899902,
+          "episode_length": 837.1422729492188,
+          "action_switch_rate": 0.4775559902191162,
+          "paddle_distance": 1957.38525390625,
+          "n": 2755.0
+        },
+        "loss": {
+          "policy_loss": 0.005506996065378189,
+          "value_loss": 0.019755321470173923,
+          "entropy": 0.7741117477416992,
+          "old_approx_kl": 0.013578432527455416,
+          "approx_kl": 0.013596383008089933,
+          "clipfrac": 0.0022749467329545455,
+          "importance": 1.0000179464166814,
+          "explained_variance": 0.7359857559204102
+        },
+        "perf": {
+          "rollout": 0.9376770782470704,
+          "eval_gpu": 0.3412519033551216,
+          "eval_env": 0.587502816438675,
+          "train": 1.659628631591797,
+          "train_misc": 0.0,
+          "train_forward": 0.45426288318634034
+        },
+        "util": {
+          "gpu_percent": 90.0,
+          "gpu_mem": 11.537678718566895,
+          "vram_used_gb": 1.2938232421875,
+          "vram_total_gb": 14.56317138671875,
+          "cpu_mem_gb": 5.603870391845703
+        }
+      }
+    },
+    {
+      "agents": 16384,
+      "minibatch_size": 65536,
+      "threads": 1,
+      "seconds": 3.68823454,
+      "steps_per_second": 852908.8825245913,
+      "metrics": {
+        "SPS": 840891.8255833279,
+        "agent_steps": 4194304,
+        "uptime": 4.987924098968506,
+        "epoch": 4,
+        "env": {
+          "perf": 0.00338640995323658,
+          "score": 2.9258382320404053,
+          "episode_return": 2.9258382320404053,
+          "episode_length": 835.4779663085938,
+          "action_switch_rate": 0.4765529930591583,
+          "paddle_distance": 1967.549072265625,
+          "n": 5488.0
+        },
+        "loss": {
+          "policy_loss": 0.004809471016580408,
+          "value_loss": 0.01926023174415935,
+          "entropy": 0.7571496963500977,
+          "old_approx_kl": 0.01588403636758978,
+          "approx_kl": 0.01580163836479187,
+          "clipfrac": 0.003943703391335227,
+          "importance": 0.9999177239157937,
+          "explained_variance": 0.7432478666305542
+        },
+        "perf": {
+          "rollout": 1.8025975952148436,
+          "eval_gpu": 0.4870042558908462,
+          "eval_env": 1.3045017995834352,
+          "train": 3.1369275512695314,
+          "train_misc": 0.0,
+          "train_forward": 0.9148772134780884
+        },
+        "util": {
+          "gpu_percent": 94.0,
+          "gpu_mem": 18.42569923400879,
+          "vram_used_gb": 2.3270263671875,
+          "vram_total_gb": 14.56317138671875,
+          "cpu_mem_gb": 5.62457275390625
+        }
+      }
+    },
+    {
+      "agents": 32768,
+      "minibatch_size": 131072,
+      "threads": 1,
+      "seconds": 6.976868766999999,
+      "steps_per_second": 901759.2576426342,
+      "metrics": {
+        "SPS": 893603.4222340982,
+        "agent_steps": 8388608,
+        "uptime": 9.38739538192749,
+        "epoch": 4,
+        "env": {
+          "perf": 0.0034053674899041653,
+          "score": 2.9423253536224365,
+          "episode_return": 2.9423253536224365,
+          "episode_length": 836.1580810546875,
+          "action_switch_rate": 0.47101879119873047,
+          "paddle_distance": 1946.93505859375,
+          "n": 10958.0
+        },
+        "loss": {
+          "policy_loss": 0.005701737647706812,
+          "value_loss": 0.01873007823120464,
+          "entropy": 0.7508017800071023,
+          "old_approx_kl": 0.01595510406927629,
+          "approx_kl": 0.016061365604400635,
+          "clipfrac": 0.004016529430042614,
+          "importance": 1.0001061179421165,
+          "explained_variance": 0.7482361793518066
+        },
+        "perf": {
+          "rollout": 3.5568668212890624,
+          "eval_gpu": 0.8974375689029693,
+          "eval_env": 2.6463960332870484,
+          "train": 5.731751342773437,
+          "train_misc": 0.0,
+          "train_forward": 1.6671477489471436
+        },
+        "util": {
+          "gpu_percent": 97.0,
+          "gpu_mem": 33.17830276489258,
+          "vram_used_gb": 4.5399169921875,
+          "vram_total_gb": 14.56317138671875,
+          "cpu_mem_gb": 5.666004180908203
+        }
+      }
+    },
+    {
+      "agents": 4096,
+      "minibatch_size": 16384,
+      "threads": 4,
+      "seconds": 1.2755684569999985,
+      "steps_per_second": 616534.5306904222,
+      "metrics": {
+        "SPS": 574418.0958207542,
+        "agent_steps": 1048576,
+        "uptime": 1.82545804977417,
+        "epoch": 4,
+        "env": {
+          "perf": 0.003512951545417309,
+          "score": 3.0351648330688477,
+          "episode_return": 3.0351648330688477,
+          "episode_length": 834.5867919921875,
+          "action_switch_rate": 0.4676031768321991,
+          "paddle_distance": 1939.2152099609375,
+          "n": 1365.0
+        },
+        "loss": {
+          "policy_loss": 0.0035274834795431657,
+          "value_loss": 0.01812375540083105,
+          "entropy": 0.7805516503073953,
+          "old_approx_kl": 0.008363244208422575,
+          "approx_kl": 0.00815174322236668,
+          "clipfrac": 2.774325284090909e-05,
+          "importance": 0.999788370999423,
+          "explained_variance": 0.6918923854827881
+        },
+        "perf": {
+          "rollout": 0.7275115661621093,
+          "eval_gpu": 0.3918902381658554,
+          "eval_env": 0.3265901757478714,
+          "train": 1.071907501220703,
+          "train_misc": 0.0,
+          "train_forward": 0.27780556869506834
+        },
+        "util": {
+          "gpu_percent": 76.0,
+          "gpu_mem": 7.644449710845947,
+          "vram_used_gb": 0.7098388671875,
+          "vram_total_gb": 14.56317138671875,
+          "cpu_mem_gb": 5.6271514892578125
+        }
+      }
+    },
+    {
+      "agents": 8192,
+      "minibatch_size": 32768,
+      "threads": 4,
+      "seconds": 1.9594794859999993,
+      "steps_per_second": 802694.8030013725,
+      "metrics": {
+        "SPS": 799246.3595611061,
+        "agent_steps": 2097152,
+        "uptime": 2.6239123344421387,
+        "epoch": 4,
+        "env": {
+          "perf": 0.003431950230151415,
+          "score": 2.9651541709899902,
+          "episode_return": 2.9651541709899902,
+          "episode_length": 837.1422729492188,
+          "action_switch_rate": 0.4775559902191162,
+          "paddle_distance": 1957.38525390625,
+          "n": 2755.0
+        },
+        "loss": {
+          "policy_loss": 0.005506996065378189,
+          "value_loss": 0.019755321470173923,
+          "entropy": 0.7741117477416992,
+          "old_approx_kl": 0.013578432527455416,
+          "approx_kl": 0.013596383008089933,
+          "clipfrac": 0.0022749467329545455,
+          "importance": 1.0000179464166814,
+          "explained_variance": 0.7359857559204102
+        },
+        "perf": {
+          "rollout": 0.9611519622802734,
+          "eval_gpu": 0.34074319911003115,
+          "eval_env": 0.6115648958683014,
+          "train": 1.6389559936523437,
+          "train_misc": 0.0,
+          "train_forward": 0.4394899196624756
+        },
+        "util": {
+          "gpu_percent": 90.0,
+          "gpu_mem": 11.537678718566895,
+          "vram_used_gb": 1.2938232421875,
+          "vram_total_gb": 14.56317138671875,
+          "cpu_mem_gb": 5.6300506591796875
+        }
+      }
+    },
+    {
+      "agents": 16384,
+      "minibatch_size": 65536,
+      "threads": 4,
+      "seconds": 3.553398111,
+      "steps_per_second": 885273.1671866418,
+      "metrics": {
+        "SPS": 861999.0073012386,
+        "agent_steps": 4194304,
+        "uptime": 4.865787982940674,
+        "epoch": 4,
+        "env": {
+          "perf": 0.00338640995323658,
+          "score": 2.9258382320404053,
+          "episode_return": 2.9258382320404053,
+          "episode_length": 835.4779663085938,
+          "action_switch_rate": 0.4765529930591583,
+          "paddle_distance": 1967.549072265625,
+          "n": 5488.0
+        },
+        "loss": {
+          "policy_loss": 0.004809471016580408,
+          "value_loss": 0.01926023174415935,
+          "entropy": 0.7571496963500977,
+          "old_approx_kl": 0.01588403636758978,
+          "approx_kl": 0.01580163836479187,
+          "clipfrac": 0.003943703391335227,
+          "importance": 0.9999177239157937,
+          "explained_variance": 0.7432478666305542
+        },
+        "perf": {
+          "rollout": 1.726340789794922,
+          "eval_gpu": 0.47862243235111235,
+          "eval_env": 1.2379215025901795,
+          "train": 3.085444763183594,
+          "train_misc": 0.0,
+          "train_forward": 0.930008542060852
+        },
+        "util": {
+          "gpu_percent": 95.0,
+          "gpu_mem": 18.42569923400879,
+          "vram_used_gb": 2.3270263671875,
+          "vram_total_gb": 14.56317138671875,
+          "cpu_mem_gb": 5.635860443115234
+        }
+      }
+    },
+    {
+      "agents": 32768,
+      "minibatch_size": 131072,
+      "threads": 4,
+      "seconds": 6.841134197000002,
+      "steps_per_second": 919651.0138273491,
+      "metrics": {
+        "SPS": 907896.2394989675,
+        "agent_steps": 8388608,
+        "uptime": 9.239611387252808,
+        "epoch": 4,
+        "env": {
+          "perf": 0.0034053674899041653,
+          "score": 2.9423253536224365,
+          "episode_return": 2.9423253536224365,
+          "episode_length": 836.1580810546875,
+          "action_switch_rate": 0.47101879119873047,
+          "paddle_distance": 1946.93505859375,
+          "n": 10958.0
+        },
+        "loss": {
+          "policy_loss": 0.005701737647706812,
+          "value_loss": 0.01873007823120464,
+          "entropy": 0.7508017800071023,
+          "old_approx_kl": 0.01595510406927629,
+          "approx_kl": 0.016061365604400635,
+          "clipfrac": 0.004016529430042614,
+          "importance": 1.0001061179421165,
+          "explained_variance": 0.7482361793518066
+        },
+        "perf": {
+          "rollout": 3.3635703125,
+          "eval_gpu": 0.8955795843601226,
+          "eval_env": 2.457995390892029,
+          "train": 5.79955078125,
+          "train_misc": 0.0,
+          "train_forward": 1.729759428024292
+        },
+        "util": {
+          "gpu_percent": 97.0,
+          "gpu_mem": 33.17830276489258,
+          "vram_used_gb": 4.5399169921875,
+          "vram_total_gb": 14.56317138671875,
+          "cpu_mem_gb": 5.6659698486328125
+        }
+      }
+    }
+  ],
+  "selected": {
+    "agents": 32768,
+    "minibatch_size": 131072,
+    "threads": 4,
+    "seconds": 6.841134197000002,
+    "steps_per_second": 919651.0138273491,
+    "metrics": {
+      "SPS": 907896.2394989675,
+      "agent_steps": 8388608,
+      "uptime": 9.239611387252808,
+      "epoch": 4,
+      "env": {
+        "perf": 0.0034053674899041653,
+        "score": 2.9423253536224365,
+        "episode_return": 2.9423253536224365,
+        "episode_length": 836.1580810546875,
+        "action_switch_rate": 0.47101879119873047,
+        "paddle_distance": 1946.93505859375,
+        "n": 10958.0
+      },
+      "loss": {
+        "policy_loss": 0.005701737647706812,
+        "value_loss": 0.01873007823120464,
+        "entropy": 0.7508017800071023,
+        "old_approx_kl": 0.01595510406927629,
+        "approx_kl": 0.016061365604400635,
+        "clipfrac": 0.004016529430042614,
+        "importance": 1.0001061179421165,
+        "explained_variance": 0.7482361793518066
+      },
+      "perf": {
+        "rollout": 3.3635703125,
+        "eval_gpu": 0.8955795843601226,
+        "eval_env": 2.457995390892029,
+        "train": 5.79955078125,
+        "train_misc": 0.0,
+        "train_forward": 1.729759428024292
+      },
+      "util": {
+        "gpu_percent": 97.0,
+        "gpu_mem": 33.17830276489258,
+        "vram_used_gb": 4.5399169921875,
+        "vram_total_gb": 14.56317138671875,
+        "cpu_mem_gb": 5.6659698486328125
+      }
+    }
+  }
+}

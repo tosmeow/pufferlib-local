@@ -35,6 +35,86 @@ class DefaultEncoder(nn.Module):
     def forward(self, observations):
         return self.encoder(observations.view(observations.shape[0], -1).float())
 
+class LaggedBreakoutEncoder(DefaultEncoder):
+    """Condition legacy per-frame velocity observations in pixels/second units.
+
+    Converting a DefaultEncoder checkpoint requires dividing weight columns 4:6
+    by 60. This preserves its forward function while improving input scaling.
+    """
+    def __init__(self, obs_size, hidden_size=128):
+        if obs_size != 190:
+            raise ValueError('LaggedBreakoutEncoder requires 190 observations')
+        super().__init__(obs_size, hidden_size)
+        scale = torch.ones(obs_size)
+        scale[4:6] = 60.0
+        self.register_buffer('_input_scale', scale, persistent=False)
+
+    def forward(self, observations):
+        flat = observations.reshape(observations.shape[0], -1).float()
+        return self.encoder(flat * self._input_scale)
+
+class _QueueReactiveCurriculumEncoder(nn.Module):
+    """Checkpoint-stable encoder for the queue-reactive training curriculum."""
+    OBS_SIZE = 44
+    CORE_OBSERVATION_INDICES = tuple(range(16)) + (18, 21, 25)
+    EXTRA_OBSERVATION_INDICES = (16, 17, 19, 20, 22, 23, 24) + tuple(range(26, 44))
+
+    def __init__(self, obs_size, hidden_size=128):
+        super().__init__()
+        if obs_size != self.OBS_SIZE:
+            raise ValueError(
+                'Queue-reactive curriculum encoders require the 44-value '
+                f'observation ABI, received {obs_size}'
+            )
+
+        self.core = nn.Linear(len(self.CORE_OBSERVATION_INDICES), hidden_size)
+        self.extra = nn.Sequential(
+            nn.Linear(len(self.EXTRA_OBSERVATION_INDICES), hidden_size),
+            nn.GELU(),
+            nn.Linear(hidden_size, hidden_size, bias=False),
+        )
+        # The expanded encoder initially reproduces the core encoder exactly.
+        # Training can then grow the residual branch without a policy jump.
+        nn.init.zeros_(self.extra[-1].weight)
+
+        self.register_buffer(
+            '_core_indices',
+            torch.tensor(self.CORE_OBSERVATION_INDICES, dtype=torch.long),
+            persistent=False,
+        )
+        self.register_buffer(
+            '_extra_indices',
+            torch.tensor(self.EXTRA_OBSERVATION_INDICES, dtype=torch.long),
+            persistent=False,
+        )
+
+    def _features(self, observations):
+        flat = observations.reshape(observations.shape[0], -1).float()
+        if flat.shape[1] != self.OBS_SIZE:
+            raise ValueError(
+                'Queue-reactive curriculum encoders require flattened '
+                f'observations of size {self.OBS_SIZE}, received {flat.shape[1]}'
+            )
+        core = flat.index_select(1, self._core_indices)
+        extra = flat.index_select(1, self._extra_indices)
+        return core, extra
+
+class QueueReactiveCoreEncoder(_QueueReactiveCurriculumEncoder):
+    """Phase-one encoder: book, inventory, alpha, and time remaining only."""
+    def __init__(self, obs_size, hidden_size=128):
+        super().__init__(obs_size, hidden_size)
+        self.extra.requires_grad_(False)
+
+    def forward(self, observations):
+        core, _ = self._features(observations)
+        return self.core(core)
+
+class QueueReactiveExpandedEncoder(_QueueReactiveCurriculumEncoder):
+    """Later-phase encoder that adds all remaining observations as a residual."""
+    def forward(self, observations):
+        core, extra = self._features(observations)
+        return self.core(core) + self.extra(extra)
+
 class MinimalEntityEncoder(nn.Module):
     def __init__(self, obs_size, hidden_size=128):
         super().__init__()
@@ -84,6 +164,49 @@ class DefaultDecoder(nn.Module):
 
         values = self.value_function(hidden)
         return logits, values
+
+class QueueReactiveMarketDistribution:
+    """Conditional Noop/Market action heads consumed by ``sample_logits``."""
+    def __init__(self, logits):
+        self.logits = tuple(logits)
+
+class QueueReactiveMarketDecoder(DefaultDecoder):
+    """Phase-one decoder exposing Noop or Market without changing the ABI."""
+    ACTION_SIZES = (5, 2, 8, 6)
+
+    def __init__(self, nvec, hidden_size=128):
+        if tuple(nvec) != self.ACTION_SIZES:
+            raise ValueError(
+                'QueueReactiveMarketDecoder requires MultiDiscrete'
+                f'{self.ACTION_SIZES}, received {tuple(nvec)}'
+            )
+        super().__init__(nvec, hidden_size)
+
+        type_mask = torch.tensor([True, False, False, True, False])
+        depth_mask = torch.tensor([True, True, True, True, False, False, False, False])
+        self.register_buffer('_type_mask', type_mask, persistent=False)
+        self.register_buffer('_depth_mask', depth_mask, persistent=False)
+
+        # Keep later action types/depths neutral while masked. Because the
+        # parameter layout is identical to DefaultDecoder, its checkpoint can
+        # subsequently be loaded strictly into the full action decoder.
+        disabled_rows = (1, 2, 4, 11, 12, 13, 14)
+        with torch.no_grad():
+            rows = torch.tensor(disabled_rows, dtype=torch.long)
+            self.decoder.weight.index_fill_(0, rows, 0)
+            self.decoder.bias.index_fill_(0, rows, 0)
+
+    def forward(self, hidden):
+        logits, values = super().forward(hidden)
+        type_logits, side_logits, depth_logits, size_logits = logits
+        type_logits = type_logits.masked_fill(~self._type_mask, -torch.inf)
+        depth_logits = depth_logits.masked_fill(~self._depth_mask, -torch.inf)
+        return QueueReactiveMarketDistribution((
+            type_logits,
+            side_logits,
+            depth_logits,
+            size_logits,
+        )), values
 
 class MLP(nn.Module):
     def __init__(self, hidden_size, num_layers=1, **kwargs):

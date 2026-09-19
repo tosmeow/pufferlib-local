@@ -3,7 +3,7 @@
 #include <stdint.h>
 
 #define QR_LEVELS 4
-#define QR_MAX_ORDERS 8
+#define QR_MAX_ORDERS 2
 #define QR_SIZE_BUCKETS 6
 #define QR_ACTION_PRICE_CHOICES 8
 
@@ -20,7 +20,7 @@
 
 #define QR_STATE_OBS 12
 #define QR_LAST_OBS 12
-#define QR_ORDER_OBS 5
+#define QR_ORDER_OBS 2
 #define QR_OBS_SIZE (QR_LEVELS * 4 + QR_STATE_OBS + QR_LAST_OBS + QR_MAX_ORDERS * QR_ORDER_OBS)
 
 typedef struct {
@@ -36,6 +36,9 @@ typedef struct {
     float qr_events;
     float qr_trades;
     float inventory;
+    float inventory_penalty;
+    float terminal_inventory_penalty;
+    float agent_rejection_penalty;
     float n;
 } Log;
 
@@ -47,7 +50,9 @@ typedef struct {
     int use_total_lvl;
     int use_power_law_impact;
     int use_alpha;
+    int use_constant_alpha;
     int strategy_impact;
+    int market_residual_rests;
     int lot_size;
     int report_interval;
     int max_events_per_step;
@@ -69,10 +74,18 @@ typedef struct {
     double alpha_kappa;
     double alpha_sigma;
     double alpha_scale;
+    double constant_alpha;
     double impact_beta;
     double impact_tau;
     double impact_m;
     int impact_components;
+    int reward_interval_ms;
+    double pnl_reward_divisor;
+    double inventory_penalty_coef;
+    double agent_rejection_penalty;
+    double episode_duration_seconds;
+    double terminal_inventory_target;
+    double terminal_inventory_penalty_coef;
 } QRConfig;
 
 typedef struct {
@@ -93,6 +106,13 @@ typedef struct {
     int inventory;
     double cash;
 } QRAgentAccount;
+
+typedef struct {
+    int64_t last_time_ns;
+    double last_wealth;
+    float last_inventory_penalty;
+    float last_terminal_inventory_penalty;
+} QRRewardState;
 
 typedef struct {
     int type;
@@ -142,6 +162,7 @@ typedef struct {
 
     QROwnOrders own;
     QRAgentAccount account;
+    QRRewardState reward_state;
     QRActionTrace last_action;
     QREventTrace last_qr;
     QRClock clock;
@@ -154,6 +175,7 @@ extern "C" {
 
 void qr_config_defaults(QRConfig* config);
 void qr_configure(QueueReactive* env, const QRConfig* config);
+double qr_mid_price(const QueueReactive* env);
 void c_reset(QueueReactive* env);
 void c_step(QueueReactive* env);
 void c_render(QueueReactive* env);

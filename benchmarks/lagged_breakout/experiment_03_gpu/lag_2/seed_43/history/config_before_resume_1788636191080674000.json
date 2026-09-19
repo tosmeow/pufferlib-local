@@ -1,0 +1,283 @@
+{
+  "load_model_path": "/Users/josephleclere/Documents/PufferLib/benchmarks/lagged_breakout/experiment_01/lag_2/seed_43/policy.bin",
+  "load_enemy_model_path": null,
+  "num_games": 4096,
+  "enemy_hidden_size": null,
+  "enemy_num_layers": null,
+  "load_id": null,
+  "render_mode": "auto",
+  "wandb": false,
+  "wandb_project": "puffer4",
+  "wandb_group": "debug",
+  "tag": null,
+  "slowly": true,
+  "save_frames": 0,
+  "gif_path": "eval.gif",
+  "fps": 15,
+  "env_name": "lagged_breakout",
+  "rank": 0,
+  "world_size": 1,
+  "gpu_id": 0,
+  "nccl_id": "None",
+  "profile": false,
+  "checkpoint_dir": "checkpoints",
+  "log_dir": "logs",
+  "checkpoint_interval": 500,
+  "eval_episodes": 10000,
+  "cudagraphs": 10,
+  "seed": 43,
+  "reset_state": true,
+  "vec": {
+    "total_agents": 4096,
+    "num_buffers": 1,
+    "num_threads": 1
+  },
+  "selfplay": {
+    "enabled": 0,
+    "max_size": 16,
+    "swap_winrate": 0.8,
+    "min_games": 2048,
+    "elo_init": 0.0,
+    "elo_k": 16.0,
+    "seed": 42,
+    "snapshot_interval": 1000000000,
+    "opp_timeout_steps": 500000000
+  },
+  "env": {
+    "num_agents": 1,
+    "frameskip": 4,
+    "action_lag": 2,
+    "volatility": 6.0,
+    "reward_interval": 4,
+    "seed": 43
+  },
+  "policy": {
+    "hidden_size": 64,
+    "num_layers": 2,
+    "expansion_factor": 1
+  },
+  "torch": {
+    "device": "mps",
+    "network": "MinGRU",
+    "encoder": "DefaultEncoder",
+    "decoder": "DefaultDecoder",
+    "freeze_modules": ""
+  },
+  "train": {
+    "gpus": 1,
+    "seed": 43,
+    "total_timesteps": 100000000,
+    "learning_rate": 0.02,
+    "anneal_lr": 0,
+    "min_lr_ratio": 0.1,
+    "gamma": 0.9721246598992744,
+    "gae_lambda": 0.948721675814334,
+    "replay_ratio": 1.4242098997083206,
+    "clip_coef": 0.6746497927896418,
+    "vf_coef": 1.2195502588297364,
+    "vf_clip_coef": 1.2291681640124468,
+    "max_grad_norm": 1.8109182724544075,
+    "ent_coef": 0.0033240721522812535,
+    "anneal_ent_coef": 0,
+    "min_ent_coef_ratio": 0.1,
+    "beta1": 0.7279714073125252,
+    "beta2": 0.9986265112492152,
+    "eps": 8.339460257113628e-05,
+    "minibatch_size": 65536,
+    "horizon": 64,
+    "vtrace_rho_clip": 2.1017317041552603,
+    "vtrace_c_clip": 1.0830442742115065,
+    "prio_alpha": 0.1,
+    "prio_beta0": 0.8247156461060179
+  },
+  "sweep": {
+    "method": "Protein",
+    "metric": "score",
+    "metric_distribution": "linear",
+    "goal": "maximize",
+    "max_suggestion_cost": 3600,
+    "max_runs": 1200,
+    "gpus": 0,
+    "downsample": 5,
+    "use_gpu": true,
+    "prune_pareto": true,
+    "early_stop_quantile": 0.3,
+    "match_enemy_model_path": "",
+    "match_num_games": 1024,
+    "match_enemy_hidden_size": 0,
+    "match_enemy_num_layers": 0,
+    "train": {
+      "total_timesteps": {
+        "distribution": "log_normal",
+        "min": 30000000.0,
+        "max": 100000000000.0,
+        "scale": "time"
+      },
+      "horizon": {
+        "distribution": "uniform_pow2",
+        "min": 8,
+        "max": 1024,
+        "scale": "auto"
+      },
+      "learning_rate": {
+        "distribution": "log_normal",
+        "min": 1e-05,
+        "max": 0.1,
+        "scale": 0.5
+      },
+      "ent_coef": {
+        "distribution": "log_normal",
+        "min": 1e-05,
+        "max": 0.2,
+        "scale": "auto"
+      },
+      "gamma": {
+        "distribution": "logit_normal",
+        "min": 0.8,
+        "max": 0.9999,
+        "scale": "auto"
+      },
+      "gae_lambda": {
+        "distribution": "logit_normal",
+        "min": 0.2,
+        "max": 0.995,
+        "scale": "auto"
+      },
+      "vtrace_rho_clip": {
+        "distribution": "uniform",
+        "min": 0.1,
+        "max": 5.0,
+        "scale": "auto"
+      },
+      "vtrace_c_clip": {
+        "distribution": "uniform",
+        "min": 0.1,
+        "max": 5.0,
+        "scale": "auto"
+      },
+      "replay_ratio": {
+        "distribution": "uniform",
+        "min": 0.25,
+        "max": 4.0,
+        "scale": "auto"
+      },
+      "clip_coef": {
+        "distribution": "uniform",
+        "min": 0.01,
+        "max": 1.0,
+        "scale": "auto"
+      },
+      "vf_clip_coef": {
+        "distribution": "uniform",
+        "min": 0.01,
+        "max": 5.0,
+        "scale": "auto"
+      },
+      "vf_coef": {
+        "distribution": "uniform",
+        "min": 0.1,
+        "max": 5.0,
+        "scale": "auto"
+      },
+      "max_grad_norm": {
+        "distribution": "uniform",
+        "min": 0.1,
+        "max": 5.0,
+        "scale": "auto"
+      },
+      "beta1": {
+        "distribution": "logit_normal",
+        "min": 0.5,
+        "max": 0.999,
+        "scale": "auto"
+      },
+      "beta2": {
+        "distribution": "logit_normal",
+        "min": 0.9,
+        "max": 0.99999,
+        "scale": "auto"
+      },
+      "eps": {
+        "distribution": "log_normal",
+        "min": 1e-14,
+        "max": 0.0001,
+        "scale": "auto"
+      },
+      "prio_alpha": {
+        "distribution": "uniform",
+        "min": 0.0,
+        "max": 1.0,
+        "scale": "auto"
+      },
+      "prio_beta0": {
+        "distribution": "uniform",
+        "min": 0.0,
+        "max": 1.0,
+        "scale": "auto"
+      }
+    },
+    "policy": {
+      "hidden_size": {
+        "distribution": "uniform_pow2",
+        "min": 32,
+        "max": 1024,
+        "scale": "auto"
+      },
+      "num_layers": {
+        "distribution": "uniform",
+        "min": 1,
+        "max": 8,
+        "scale": "auto"
+      }
+    },
+    "vec": {
+      "num_buffers": {
+        "distribution": "uniform",
+        "min": 1,
+        "max": 8,
+        "scale": "auto"
+      }
+    }
+  },
+  "base": {},
+  "sweep.train.total_timesteps": {},
+  "sweep.policy.hidden_size": {},
+  "sweep.policy.num_layers": {},
+  "sweep.vec.num_buffers": {},
+  "sweep.train.horizon": {},
+  "sweep.train.learning_rate": {},
+  "sweep.train.ent_coef": {},
+  "sweep.train.gamma": {},
+  "sweep.train.gae_lambda": {},
+  "sweep.train.vtrace_rho_clip": {},
+  "sweep.train.vtrace_c_clip": {},
+  "sweep.train.replay_ratio": {},
+  "sweep.train.clip_coef": {},
+  "sweep.train.vf_clip_coef": {},
+  "sweep.train.vf_coef": {},
+  "sweep.train.max_grad_norm": {},
+  "sweep.train.beta1": {},
+  "sweep.train.beta2": {},
+  "sweep.train.eps": {},
+  "sweep.train.prio_alpha": {},
+  "sweep.train.prio_beta0": {},
+  "continuation": {
+    "source": "/Users/josephleclere/Documents/PufferLib/benchmarks/lagged_breakout/experiment_01/lag_2/seed_43",
+    "source_steps": 1015808,
+    "initial_optimizer": "fresh: source checkpoint contains weights only",
+    "resume_environment": "new episodes; native environment state is not serialized",
+    "options": {
+      "additional_steps": 100000000,
+      "eval_interval": 5000000,
+      "eval_episodes": 32,
+      "holdout_episodes": 64,
+      "learning_rate": 0.02,
+      "target_return": 850.0,
+      "target_checks": 3,
+      "device": "mps",
+      "agents": 4096,
+      "minibatch_size": 65536,
+      "anneal_steps": 50000000
+    }
+  }
+}

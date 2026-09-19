@@ -1,0 +1,27 @@
+{
+  "source": "/Users/josephleclere/Documents/PufferLib/benchmarks/lagged_breakout/experiment_01",
+  "options": {
+    "additional_steps": 160000000,
+    "eval_interval": 5000000,
+    "eval_episodes": 32,
+    "holdout_episodes": 64,
+    "learning_rate": 0.005,
+    "gamma": null,
+    "target_return": 850.0,
+    "target_checks": 3,
+    "device": "mps",
+    "agents": 4096,
+    "minibatch_size": 16384,
+    "anneal_steps": 50000000,
+    "normalize_velocity": true,
+    "restart_from_best": false,
+    "warm_start": "/Users/josephleclere/Documents/PufferLib/benchmarks/lagged_breakout/experiment_03_gpu/lag_0/seed_44/policy.bin"
+  },
+  "parent_pid": 98368,
+  "lags": [
+    4
+  ],
+  "seeds": [
+    44
+  ]
+}

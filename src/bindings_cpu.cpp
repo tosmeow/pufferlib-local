@@ -1,4 +1,6 @@
-// bindings_cpu.cpp - CPU-only Python bindings (no nvcc/CUDA required)
+// bindings_cpu.cpp - CPU vector bindings for CPU and Apple MPS PyTorch training
+// (no nvcc/CUDA required). MPS tensors stay in PyTorch; only environment data
+// crosses this host-memory interface.
 
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
@@ -101,6 +103,7 @@ struct VecEnv {
     int total_agents;
     int obs_size;
     int num_atns;
+    int diagnostic_size;
     std::vector<int> act_sizes;
     std::string obs_dtype;
     size_t obs_elem_size;
@@ -123,6 +126,7 @@ static std::unique_ptr<VecEnv> create_vec(py::dict args, int gpu = 0) {
     ve->total_agents = total_agents;
     ve->obs_size = get_obs_size();
     ve->num_atns = get_num_atns();
+    ve->diagnostic_size = ve->vec->diagnostic_size;
     {
         int* raw = get_act_sizes();
         int n = get_num_act_sizes();
@@ -163,6 +167,12 @@ static void vec_close(VecEnv& ve) {
     ve.vec = nullptr;
 }
 
+static void vec_diagnostic(VecEnv& ve, long long output_ptr) {
+    if (ve.diagnostic_size <= 0)
+        throw std::runtime_error("This environment exposes no diagnostics");
+    static_vec_diagnostic(ve.vec, (float*)output_ptr);
+}
+
 // ============================================================================
 // Module
 // ============================================================================
@@ -179,6 +189,7 @@ PYBIND11_MODULE(_C, m) {
         .def_readonly("total_agents", &VecEnv::total_agents)
         .def_readonly("obs_size", &VecEnv::obs_size)
         .def_readonly("num_atns", &VecEnv::num_atns)
+        .def_readonly("diagnostic_size", &VecEnv::diagnostic_size)
         .def_readonly("act_sizes", &VecEnv::act_sizes)
         .def_readonly("obs_dtype", &VecEnv::obs_dtype)
         .def_readonly("obs_elem_size", &VecEnv::obs_elem_size)
@@ -190,5 +201,6 @@ PYBIND11_MODULE(_C, m) {
         .def("cpu_step", &cpu_vec_step_py)
         .def("render", [](VecEnv& ve, int env_id) { static_vec_render(ve.vec, env_id); })
         .def("log", &vec_log)
+        .def("diagnostic", &vec_diagnostic)
         .def("close", &vec_close);
 }

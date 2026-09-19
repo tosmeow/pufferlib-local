@@ -37,6 +37,7 @@ Smoke Test
 .. code-block:: bash
 
    .venv/bin/puffer train breakout --slowly \
+     --torch.device mps \
      --train.total-timesteps 256 \
      --vec.total-agents 32 \
      --vec.num-buffers 1 \
@@ -47,6 +48,9 @@ Smoke Test
      --policy.num-layers 1 \
      --checkpoint-dir /private/tmp/pufferlib-checkpoints \
      --log-dir /private/tmp/pufferlib-logs
+
+Omit ``--torch.device mps`` to use automatic selection, or pass
+``--torch.device cpu`` for a numerical/performance baseline.
 
 Building These Docs
 -------------------

@@ -388,7 +388,7 @@ void destroy_brick(Breakout* env, int brick_idx) {
     }
 }
 
-bool handle_collisions(Breakout* env) {
+int handle_collision_kind(Breakout* env) {
     CollisionInfo collision_info = {
         .t = 2.0f,
         .overlap = -1.0f,
@@ -417,7 +417,11 @@ bool handle_collisions(Breakout* env) {
             env->paddle_width = HALF_PADDLE_WIDTH;
         }
     }
-    return collision_info.brick_index != BRICK_INDEX_NO_COLLISION;
+    return collision_info.brick_index;
+}
+
+bool handle_collisions(Breakout* env) {
+    return handle_collision_kind(env) != BRICK_INDEX_NO_COLLISION;
 }
 
 void reset_round(Breakout* env) {
@@ -448,7 +452,9 @@ void c_reset(Breakout* env) {
     compute_observations(env);
 }
 
-void step_frame(Breakout* env, float action) {
+// Noise is a position increment for this frame, never an accumulated change in
+// velocity. The zero-noise branch is the original Breakout update.
+void step_frame_with_noise(Breakout* env, float action, float noise_x, float noise_y) {
     float act = 0.0;
     if (env->balls_fired == 0) {
         env->balls_fired = 1;
@@ -477,9 +483,34 @@ void step_frame(Breakout* env, float action) {
 
     //Handle collisions. 
     //Regular timestepping is done only if there are no collisions.
-    if(!handle_collisions(env)){
-        env->ball_x += env->ball_vx;
-        env->ball_y += env->ball_vy;
+    if (noise_x == 0.0f && noise_y == 0.0f) {
+        if (!handle_collisions(env)) {
+            env->ball_x += env->ball_vx;
+            env->ball_y += env->ball_vy;
+        }
+    } else {
+        float drift_x = env->ball_vx;
+        float drift_y = env->ball_vy;
+        float displacement_x = drift_x + noise_x;
+        float displacement_y = drift_y + noise_y;
+        env->ball_vx = displacement_x;
+        env->ball_vy = displacement_y;
+        // A fresh noise sample can point outward even at the previous contact.
+        // Start just inside the walls so the swept solver sees a positive time
+        // of impact (its legacy test deliberately excludes t == 0).
+        env->ball_x = fmaxf(0.0001f, fminf(env->width - env->ball_width - 0.0001f, env->ball_x));
+        env->ball_y = fmaxf(0.0001f, env->ball_y);
+        int kind = handle_collision_kind(env);
+        if (kind == BRICK_INDEX_NO_COLLISION) {
+            env->ball_x += displacement_x;
+            env->ball_y += displacement_y;
+        }
+        // The paddle chooses a new drift; other surfaces reflect the old drift
+        // on the same axes as the sampled displacement.
+        if (kind != BRICK_INDEX_PADDLE_COLLISION) {
+            env->ball_vx = env->ball_vx == displacement_x ? drift_x : -drift_x;
+            env->ball_vy = env->ball_vy == displacement_y ? drift_y : -drift_y;
+        }
     }
 
     if (env->ball_y >= env->paddle_y + env->paddle_height) {
@@ -491,6 +522,10 @@ void step_frame(Breakout* env, float action) {
         add_log(env);
         c_reset(env);
     }
+}
+
+void step_frame(Breakout* env, float action) {
+    step_frame_with_noise(env, action, 0.0f, 0.0f);
 }
 
 void c_step(Breakout* env) {

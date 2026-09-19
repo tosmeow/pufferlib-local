@@ -353,11 +353,12 @@ EXT_SUFFIX=$($PYTHON_BIN -c "import sysconfig; print(sysconfig.get_config_var('E
 OUTPUT="pufferlib/_C${EXT_SUFFIX}"
 
 fix_macos_libomp() {
-    [ "$PLATFORM" = "Darwin" ] || return
-    command -v install_name_tool >/dev/null || return
+    # Skipping this optional macOS fix is success, including under set -e.
+    [ "$PLATFORM" = "Darwin" ] || return 0
+    command -v install_name_tool >/dev/null || return 0
     local torch_libomp
     torch_libomp=$($PYTHON_BIN -c "import pathlib, torch; p = pathlib.Path(torch.__file__).parent / 'lib' / 'libomp.dylib'; print(p if p.exists() else '')" 2>/dev/null || true)
-    [ -n "$torch_libomp" ] || return
+    [ -n "$torch_libomp" ] || return 0
     install_name_tool -change /opt/homebrew/opt/llvm/lib/libomp.dylib "$torch_libomp" "$OUTPUT" 2>/dev/null || true
 }
 

@@ -7,6 +7,9 @@ PufferLib is a fast and sane reinforcement learning library that can train tiny,
 
 All of our documentation is hosted at [puffer.ai](https://puffer.ai "PufferLib Documentation"). @jsuarez5341 on [Discord](https://discord.gg/puffer) for support. Post there before opening issues. We're always looking for new contributors!
 
+For this checkout, see the [CPU/GPU training code map](docs/training_code_map.md) for algorithms, optimizers, training metrics, and extension points.
+To run the lagged-Breakout experiment on a rented NVIDIA GPU, see the [Modal setup guide](docs/modal_lagged_breakout.md).
+
 ## Star to puff up the project!
 
 <a href="https://star-history.com/#pufferai/pufferlib&Date">

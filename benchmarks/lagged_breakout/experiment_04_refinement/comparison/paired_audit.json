@@ -1,0 +1,71 @@
+{
+  "episodes_per_policy": 512,
+  "seed": 500000,
+  "selection": "Training-setting validation only; audit and original-game results do not select checkpoints.",
+  "runs": [
+    {
+      "lag": 0,
+      "seed": 42,
+      "before_return": 860.46484375,
+      "after_return": 864.0,
+      "paired_return_change": 3.53515625,
+      "paired_standard_error": 1.3209577562928152,
+      "before_win_rate": 0.9609375,
+      "after_win_rate": 1.0,
+      "before_capped": 0,
+      "after_capped": 0,
+      "before_sha256": "862030da64d5b7c98d39745559b3a21979aa3d4bbc8b9f6d82b8ffdfa7d02d36",
+      "after_sha256": "c191f04c1b6b76c75f6ee5c1f94a5640c01352e5fbd372fee6eaf9418bdca2c6",
+      "original_before_return": 863.671875,
+      "original_after_return": 864.0
+    },
+    {
+      "lag": 2,
+      "seed": 42,
+      "before_return": 863.87890625,
+      "after_return": 864.0,
+      "paired_return_change": 0.12109375,
+      "paired_standard_error": 0.12109374999999999,
+      "before_win_rate": 0.998046875,
+      "after_win_rate": 1.0,
+      "before_capped": 0,
+      "after_capped": 0,
+      "before_sha256": "b812b7f9235adccf0bf9cf18ab0cb3b9b62d06cbd52bc063f09c27b9086b4d8f",
+      "after_sha256": "b1290c095fb5caddbf0a359136c2099ed203fc2fddd400dd0da684f408a66bc2",
+      "original_before_return": 861.5,
+      "original_after_return": 835.703125
+    },
+    {
+      "lag": 4,
+      "seed": 42,
+      "before_return": 863.76953125,
+      "after_return": 861.365234375,
+      "paired_return_change": -2.404296875,
+      "paired_standard_error": 1.373897817217966,
+      "before_win_rate": 0.998046875,
+      "after_win_rate": 0.9765625,
+      "before_capped": 0,
+      "after_capped": 0,
+      "before_sha256": "afa38413f3c2a50fc64b707edf55b19694b0341eeebeacff641bfd0e44186fa8",
+      "after_sha256": "c3502398d47c7a1f8c175046570ff4eccb9d794c9fa17168a6d4fb3c5e699f20",
+      "original_before_return": 564.453125,
+      "original_after_return": 453.0625
+    },
+    {
+      "lag": 8,
+      "seed": 42,
+      "before_return": 852.3828125,
+      "after_return": 860.521484375,
+      "paired_return_change": 8.138671875,
+      "paired_standard_error": 2.5499048745681754,
+      "before_win_rate": 0.8828125,
+      "after_win_rate": 0.923828125,
+      "before_capped": 0,
+      "after_capped": 0,
+      "before_sha256": "70426480b397649d10feda82df326a50dbc88c5cfbabc0c2c0f9a4cd448a3f8c",
+      "after_sha256": "adb0f0becfa019179177ecf48d8beb8a60b406c903e0fb87c092b9f7e616d79b",
+      "original_before_return": 154.234375,
+      "original_after_return": 125.28125
+    }
+  ]
+}

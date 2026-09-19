@@ -551,6 +551,21 @@ class NoAlpha : public Alpha {
 	double scale() const override { return 0.0; }
 };
 
+class ConstantAlpha : public Alpha {
+  public:
+	ConstantAlpha(double value, double scale = 1.0) : value_(value), scale_(scale) {}
+
+	void step(int64_t) override {}
+	double value() const override { return value_; }
+	double scale() const override { return scale_; }
+	void reset() override {}
+	void consume(double) override {}
+
+  private:
+	double value_;
+	double scale_;
+};
+
 class OUAlpha : public Alpha {
   public:
 	// kappa_per_min: mean reversion rate in min^-1

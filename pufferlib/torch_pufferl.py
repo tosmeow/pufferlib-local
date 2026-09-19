@@ -46,7 +46,55 @@ def _entropy(logits):
     p_log_p = logits * logits_to_probs(logits)
     return -p_log_p.sum(-1)
 
+def _sample_queue_reactive_market(distribution, action=None):
+    """Sample/score the conditional Noop-or-Market phase-one policy."""
+    logits = torch.nn.utils.rnn.pad_sequence(
+        [head.transpose(0, 1) for head in distribution.logits],
+        batch_first=False,
+        padding_value=-torch.inf,
+    ).permute(1, 2, 0)
+    normalized_logits = logits - logits.logsumexp(dim=-1, keepdim=True)
+    probs = logits_to_probs(logits)
+    batch = logits.shape[1]
+    sampled = action is None
+
+    if sampled:
+        safe_probs = torch.nan_to_num(probs, 1e-8, 1e-8, 1e-8)
+        action = torch.multinomial(
+            safe_probs.reshape(-1, safe_probs.shape[-1]),
+            1,
+            replacement=True,
+        ).int().reshape(probs.shape[:-1])
+    else:
+        action = action.reshape(batch, 4).T.long()
+
+    head_logprobs = _log_prob(normalized_logits, action)
+    head_entropies = _entropy(normalized_logits)
+    action_type, side, depth, size = action
+    is_market = action_type.eq(3)
+    conditional_lp = head_logprobs[1:].sum(0)
+    logprob = head_logprobs[0] + is_market.to(head_logprobs.dtype) * conditional_lp
+
+    # Entropy of the actual conditional policy, not of four independent heads:
+    # H(type) + P(Market) * H(side, depth, size | Market).
+    market_probability = probs[0, :, 3]
+    entropy = head_entropies[0] + market_probability * head_entropies[1:].sum(0)
+
+    if sampled:
+        zeros = torch.zeros_like(side)
+        side = torch.where(is_market, side, zeros)
+        depth = torch.where(is_market, depth, zeros)
+        size = torch.where(is_market, size, zeros)
+
+    actions = torch.stack((action_type, side, depth, size), dim=1)
+    return actions, logprob, entropy
+
 def sample_logits(logits, action=None):
+    from pufferlib.models import QueueReactiveMarketDistribution
+
+    if isinstance(logits, QueueReactiveMarketDistribution):
+        return _sample_queue_reactive_market(logits, action)
+
     is_discrete = isinstance(logits, torch.Tensor)
     if isinstance(logits, torch.distributions.Normal):
         batch = logits.loc.shape[0]
@@ -99,10 +147,47 @@ _TORCH_TO_CTYPE = {
     torch.float32: ctypes.c_float,
 }
 
-def _actions_for_vec_step(action):
+def _actions_for_vec_step(action, device=None):
     if action.dim() == 1:
         action = action.unsqueeze(-1)
-    return action.to(dtype=torch.float32).contiguous()
+    if device is None:
+        return action.to(dtype=torch.float32).contiguous()
+    return action.to(device=device, dtype=torch.float32).contiguous()
+
+def _mps_is_available():
+    """Return whether this PyTorch build can currently execute on Apple MPS."""
+    mps = getattr(torch.backends, 'mps', None)
+    return mps is not None and mps.is_built() and mps.is_available()
+
+def _resolve_device(requested='auto'):
+    """Resolve the model/training device independently of the vector backend."""
+    requested = str(requested).lower()
+    if requested == 'auto':
+        if torch.cuda.is_available():
+            return torch.device('cuda')
+        if _mps_is_available():
+            return torch.device('mps')
+        return torch.device('cpu')
+
+    try:
+        device = torch.device(requested)
+    except RuntimeError as exc:
+        raise ValueError(
+            f"Unsupported torch device {requested!r}; use auto, cpu, cuda, or mps"
+        ) from exc
+
+    if device.type == 'cuda' and not torch.cuda.is_available():
+        raise RuntimeError('CUDA was requested, but it is not available to PyTorch')
+    if device.type == 'mps' and not _mps_is_available():
+        raise RuntimeError(
+            'MPS was requested, but it is unavailable. MPS requires an '
+            'MPS-enabled PyTorch build and supported Apple hardware/macOS.'
+        )
+    if device.type not in ('cpu', 'cuda', 'mps'):
+        raise ValueError(
+            f"Unsupported torch device {requested!r}; use auto, cpu, cuda, or mps"
+        )
+    return device
 
 def _cpu_tensor(ptr, shape, dtype):
     '''Zero-copy CPU tensor from a raw pointer via ctypes.'''
@@ -114,17 +199,22 @@ def _cpu_tensor(ptr, shape, dtype):
     return torch.frombuffer(arr, dtype=dtype).reshape(shape)
 
 class PuffeRL:
-    def __init__(self, args, vec, policy, verbose=True):
+    def __init__(self, args, vec, policy, verbose=True, device=None):
         config = args['train']
-        device = 'cuda' if _C.gpu else 'cpu'
+        if device is None:
+            device = _resolve_device(args.get('torch', {}).get('device', 'auto'))
+        else:
+            device = torch.device(device)
         self.device = device
 
         torch.set_float32_matmul_precision('high')
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = True
+        if device.type == 'cuda':
+            torch.backends.cudnn.deterministic = True
+            torch.backends.cudnn.benchmark = True
 
         self._vec = vec
         self.gpu = vec.gpu
+        self.vec_device = torch.device('cuda' if self.gpu else 'cpu')
         total_agents = vec.total_agents
         self.total_agents = total_agents
         obs_dtype = _OBS_DTYPE_MAP.get(vec.obs_dtype, torch.uint8)
@@ -178,7 +268,7 @@ class PuffeRL:
         self.last_log_step = 0
         self.last_log_time = time.time()
         self.start_time = time.time()
-        self.profile = Profile(gpu=self.gpu)
+        self.profile = Profile(device=device)
         self.verbose = verbose
 
         self.model_size = sum(p.numel() for p in policy.parameters() if p.requires_grad)
@@ -232,9 +322,8 @@ class PuffeRL:
                 self.values[t] = value.flatten()
 
             prof.mark(2)
-            actions_flat = _actions_for_vec_step(action)
+            actions_flat = _actions_for_vec_step(action, self.vec_device)
             if self.gpu:
-                actions_flat = actions_flat.cuda()
                 self._vec.gpu_step(actions_flat.data_ptr())
                 torch.cuda.synchronize()
             else:
@@ -379,7 +468,8 @@ class PuffeRL:
                 'train_misc': perf[P.TRAIN_MISC],
                 'train_forward': perf[P.TRAIN_FORWARD],
             },
-            'util': dict(_C.get_utilization(self.args.get('gpu_id', 0))) if self.gpu else {},
+            'util': dict(_C.get_utilization(self.args.get('gpu_id', 0)))
+                if self.device.type == 'cuda' and hasattr(_C, 'get_utilization') else {},
         }
         self.last_log_time = time.time()
         self.last_log_step = self.global_step
@@ -407,38 +497,75 @@ class PuffeRL:
     @classmethod
     def create_pufferl(cls, args):
         '''Matches _C.create_pufferl(args) interface.'''
+        device = _resolve_device(args.get('torch', {}).get('device', 'auto'))
+
         # DDP setup
         if 'LOCAL_RANK' in os.environ:
+            if device.type != 'cuda':
+                raise RuntimeError('Distributed PyTorch training currently requires CUDA')
             world_size = int(os.environ.get('WORLD_SIZE', 1))
             local_rank = int(os.environ['LOCAL_RANK'])
             torch.cuda.set_device(local_rank)
             os.environ['CUDA_VISIBLE_DEVICES'] = str(local_rank)
+            device = torch.device('cuda', local_rank)
 
         args['vec']['num_buffers'] = 1
-        vec = _C.create_vec(args, _C.gpu)
-        policy = load_policy(args, vec)
+        # CUDA vectors can only be shared with CUDA tensors. MPS models use the
+        # CPU vector path and copy observations/actions at this boundary.
+        vec_gpu = int(device.type == 'cuda' and bool(_C.gpu))
+        vec = _C.create_vec(args, vec_gpu)
+        policy = load_policy(args, vec, device=device)
 
         if 'LOCAL_RANK' in os.environ:
             torch.distributed.init_process_group(backend='nccl', world_size=world_size)
-            policy = policy.to(local_rank)
+            policy = policy.to(device)
             model = torch.nn.parallel.DistributedDataParallel(
                 policy, device_ids=[local_rank], output_device=local_rank)
             if hasattr(policy, 'lstm'):
                 model.hidden_size = policy.hidden_size
             model.forward_eval = policy.forward_eval
             model.initial_state = policy.initial_state
-            policy = model.to(local_rank)
+            policy = model.to(device)
 
-        return cls(args, vec, policy)
+        return cls(args, vec, policy, device=device)
+
+def _compute_puff_advantage_torch(values, rewards, terminals,
+        ratio, advantages, gamma, gae_lambda, vtrace_rho_clip, vtrace_c_clip):
+    """Device-neutral equivalent of the native CPU/CUDA advantage kernels."""
+    lastpufferlam = torch.zeros_like(values[:, 0])
+    for t in range(values.shape[1] - 2, -1, -1):
+        t_next = t + 1
+        nextnonterminal = 1.0 - terminals[:, t_next]
+        importance = ratio[:, t]
+        rho_t = torch.clamp(importance, max=vtrace_rho_clip)
+        c_t = torch.clamp(importance, max=vtrace_c_clip)
+        delta = (
+            rho_t * rewards[:, t_next]
+            + gamma * values[:, t_next] * nextnonterminal
+            - values[:, t]
+        )
+        lastpufferlam = (
+            delta
+            + gamma * gae_lambda * c_t * lastpufferlam * nextnonterminal
+        )
+        advantages[:, t].copy_(lastpufferlam)
+    return advantages
 
 def compute_puff_advantage(values, rewards, terminals,
         ratio, advantages, gamma, gae_lambda, vtrace_rho_clip, vtrace_c_clip):
+    device_type = values.device.type
+    if device_type == 'cpu' and hasattr(_C, 'puff_advantage_cpu'):
+        fn = _C.puff_advantage_cpu
+    elif device_type == 'cuda' and hasattr(_C, 'puff_advantage'):
+        fn = _C.puff_advantage
+    else:
+        return _compute_puff_advantage_torch(
+            values, rewards, terminals, ratio, advantages,
+            gamma, gae_lambda, vtrace_rho_clip, vtrace_c_clip)
+
     num_steps, horizon = values.shape
-    fn = _C.puff_advantage if values.is_cuda else _C.puff_advantage_cpu
-    fn(
-        values.data_ptr(), rewards.data_ptr(), terminals.data_ptr(),
-        ratio.data_ptr(), advantages.data_ptr(),
-        num_steps, horizon,
+    fn(values.data_ptr(), rewards.data_ptr(), terminals.data_ptr(),
+        ratio.data_ptr(), advantages.data_ptr(), num_steps, horizon,
         gamma, gae_lambda, vtrace_rho_clip, vtrace_c_clip)
     return advantages
 
@@ -446,22 +573,27 @@ class Profile:
     '''Matches pufferlib.cu profiling: accumulate ms, report seconds.'''
     ROLLOUT, EVAL_GPU, EVAL_ENV, TRAIN, TRAIN_MISC, TRAIN_FORWARD, NUM = range(7)
 
-    def __init__(self, gpu=True):
+    def __init__(self, device='cpu'):
         self.accum = [0.0] * Profile.NUM
-        self.gpu = gpu
-        if gpu:
+        self.device = torch.device(device)
+        if self.device.type == 'cuda':
             self._events = [torch.cuda.Event(enable_timing=True) for _ in range(4)]
         else:
             self._stamps = [0.0] * 4
 
     def mark(self, idx):
-        if self.gpu:
+        if self.device.type == 'cuda':
             self._events[idx].record()
         else:
+            # PyTorch MPS event elapsed_time can deadlock when an event object is
+            # recorded repeatedly in the rollout loop. Synchronized wall-clock
+            # stamps are reliable and match the CPU profiler's units.
+            if self.device.type == 'mps':
+                torch.mps.synchronize()
             self._stamps[idx] = time.perf_counter()
 
     def elapsed(self, idx, start_ev, end_ev):
-        if self.gpu:
+        if self.device.type == 'cuda':
             self._events[end_ev].synchronize()
             self.accum[idx] += self._events[start_ev].elapsed_time(self._events[end_ev])
         else:
@@ -472,7 +604,7 @@ class Profile:
         self.accum = [0.0] * Profile.NUM
         return out
 
-def load_policy(args, vec):
+def load_policy(args, vec, device=None):
     import pufferlib.models
     policy_kwargs = args['policy']
     network_cls = getattr(pufferlib.models, args['torch']['network'])
@@ -484,7 +616,8 @@ def load_policy(args, vec):
     decoder = decoder_cls(vec.act_sizes, policy_kwargs['hidden_size'])
     policy = pufferlib.models.Policy(encoder, decoder, network)
 
-    device = 'cuda' if _C.gpu else 'cpu'
+    if device is None:
+        device = _resolve_device(args.get('torch', {}).get('device', 'auto'))
     policy = policy.to(device)
 
     load_id = args['load_id']
@@ -512,5 +645,29 @@ def load_policy(args, vec):
         state_dict = {k.replace('module.', ''): v for k, v in state_dict.items()}
         policy.load_state_dict(state_dict)
 
+    _freeze_policy_modules(policy, args.get('torch', {}).get('freeze_modules', ''))
+
     return policy
 
+def _freeze_policy_modules(policy, specification=''):
+    """Freeze comma-separated parameter/module prefixes after checkpoint load."""
+    prefixes = [prefix.strip() for prefix in str(specification).split(',') if prefix.strip()]
+    if not prefixes:
+        return policy
+
+    named_parameters = tuple(policy.named_parameters())
+    for prefix in prefixes:
+        matches = [
+            parameter for name, parameter in named_parameters
+            if name == prefix or name.startswith(prefix + '.')
+        ]
+        if not matches:
+            available = ', '.join(name for name, _ in named_parameters)
+            raise ValueError(
+                f'freeze_modules entry {prefix!r} matched no policy parameters. '
+                f'Available parameters: {available}'
+            )
+        for parameter in matches:
+            parameter.requires_grad_(False)
+
+    return policy

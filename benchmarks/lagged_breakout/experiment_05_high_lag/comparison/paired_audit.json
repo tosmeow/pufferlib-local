@@ -1,0 +1,39 @@
+{
+  "episodes_per_policy": 1024,
+  "seed": 600000,
+  "selection": "Training-setting validation only; audit and original-game results do not select checkpoints.",
+  "runs": [
+    {
+      "lag": 4,
+      "seed": 42,
+      "before_return": 863.0087890625,
+      "after_return": 863.560546875,
+      "paired_return_change": 0.5517578125,
+      "paired_standard_error": 0.7263744739939823,
+      "before_win_rate": 0.990234375,
+      "after_win_rate": 0.9990234375,
+      "before_capped": 0,
+      "after_capped": 0,
+      "before_sha256": "afa38413f3c2a50fc64b707edf55b19694b0341eeebeacff641bfd0e44186fa8",
+      "after_sha256": "ac63028813e9be94700e0c2bac1958142e413b0d0a5e7a3d260693a120c9626c",
+      "original_before_return": 564.453125,
+      "original_after_return": 547.03125
+    },
+    {
+      "lag": 8,
+      "seed": 42,
+      "before_return": 856.2529296875,
+      "after_return": 857.3720703125,
+      "paired_return_change": 1.119140625,
+      "paired_standard_error": 1.836825636958487,
+      "before_win_rate": 0.9033203125,
+      "after_win_rate": 0.919921875,
+      "before_capped": 0,
+      "after_capped": 0,
+      "before_sha256": "adb0f0becfa019179177ecf48d8beb8a60b406c903e0fb87c092b9f7e616d79b",
+      "after_sha256": "9dffee5b4250641508f50578a820852aea62199f094784d0b443d16e5ae48fb7",
+      "original_before_return": 125.28125,
+      "original_after_return": 129.25
+    }
+  ]
+}

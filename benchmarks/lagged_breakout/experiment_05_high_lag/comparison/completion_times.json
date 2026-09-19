@@ -1,0 +1,71 @@
+{
+  "units": "simulated seconds",
+  "definition": "Time to return 864 among completed winning episodes; compare win counts alongside times.",
+  "paired_definition": "After minus before on environment seeds where both policies won; negative means faster.",
+  "runs": [
+    {
+      "lag": 4,
+      "seed": 42,
+      "environment": "training_settings",
+      "before_wins": 1014,
+      "before_episodes": 1024,
+      "before_mean_win_seconds": 267.6613412228797,
+      "before_median_win_seconds": 262.73333333333335,
+      "after_wins": 1023,
+      "after_episodes": 1024,
+      "after_mean_win_seconds": 269.60358422939066,
+      "after_median_win_seconds": 264.3333333333333,
+      "paired_wins": 1013,
+      "paired_mean_change_seconds": 2.104508061862454,
+      "paired_standard_error_seconds": 1.56742803829332
+    },
+    {
+      "lag": 4,
+      "seed": 42,
+      "environment": "original_game",
+      "before_wins": 3,
+      "before_episodes": 64,
+      "before_mean_win_seconds": 686.7777777777778,
+      "before_median_win_seconds": 307.06666666666666,
+      "after_wins": 2,
+      "after_episodes": 64,
+      "after_mean_win_seconds": 484.79999999999995,
+      "after_median_win_seconds": 484.79999999999995,
+      "paired_wins": 0,
+      "paired_mean_change_seconds": null,
+      "paired_standard_error_seconds": null
+    },
+    {
+      "lag": 8,
+      "seed": 42,
+      "environment": "training_settings",
+      "before_wins": 925,
+      "before_episodes": 1024,
+      "before_mean_win_seconds": 268.12295495495493,
+      "before_median_win_seconds": 264.26666666666665,
+      "after_wins": 942,
+      "after_episodes": 1024,
+      "after_mean_win_seconds": 266.56786978060865,
+      "after_median_win_seconds": 262.5,
+      "paired_wins": 851,
+      "paired_mean_change_seconds": -1.7081864473168822,
+      "paired_standard_error_seconds": 1.4737883111247574
+    },
+    {
+      "lag": 8,
+      "seed": 42,
+      "environment": "original_game",
+      "before_wins": 0,
+      "before_episodes": 64,
+      "before_mean_win_seconds": null,
+      "before_median_win_seconds": null,
+      "after_wins": 0,
+      "after_episodes": 64,
+      "after_mean_win_seconds": null,
+      "after_median_win_seconds": null,
+      "paired_wins": 0,
+      "paired_mean_change_seconds": null,
+      "paired_standard_error_seconds": null
+    }
+  ]
+}

@@ -6,7 +6,13 @@
 #define OBS_TENSOR_T FloatTensor
 
 #define Env QueueReactive
+#define MY_DIAGNOSTIC_SIZE 1
+static void my_diagnostic(Env* env, float* out);
 #include "vecenv.h"
+
+static void my_diagnostic(Env* env, float* out) {
+    out[0] = (float)qr_mid_price(env);
+}
 
 static int get_int_default(Dict* kwargs, const char* key, int value) {
     DictItem* item = dict_get_unsafe(kwargs, key);
@@ -35,7 +41,11 @@ void my_init(Env* env, Dict* kwargs) {
     config.use_total_lvl = get_int_default(kwargs, "use_total_lvl", config.use_total_lvl);
     config.use_power_law_impact = get_int_default(kwargs, "use_power_law_impact", config.use_power_law_impact);
     config.use_alpha = get_int_default(kwargs, "use_alpha", config.use_alpha);
+    config.use_constant_alpha = get_int_default(
+        kwargs, "use_constant_alpha", config.use_constant_alpha);
     config.strategy_impact = get_int_default(kwargs, "strategy_impact", config.strategy_impact);
+    config.market_residual_rests = get_int_default(
+        kwargs, "market_residual_rests", config.market_residual_rests);
     config.lot_size = get_int_default(kwargs, "lot_size", config.lot_size);
     config.report_interval = get_int_default(kwargs, "report_interval", config.report_interval);
     config.max_events_per_step = get_int_default(kwargs, "max_events_per_step", config.max_events_per_step);
@@ -53,10 +63,25 @@ void my_init(Env* env, Dict* kwargs) {
     config.alpha_kappa = get_double_default(kwargs, "alpha_kappa", config.alpha_kappa);
     config.alpha_sigma = get_double_default(kwargs, "alpha_sigma", config.alpha_sigma);
     config.alpha_scale = get_double_default(kwargs, "alpha_scale", config.alpha_scale);
+    config.constant_alpha = get_double_default(
+        kwargs, "constant_alpha", config.constant_alpha);
     config.impact_beta = get_double_default(kwargs, "impact_beta", config.impact_beta);
     config.impact_tau = get_double_default(kwargs, "impact_tau", config.impact_tau);
     config.impact_m = get_double_default(kwargs, "impact_m", config.impact_m);
     config.impact_components = get_int_default(kwargs, "impact_components", config.impact_components);
+    config.reward_interval_ms = get_int_default(kwargs, "reward_interval_ms", config.reward_interval_ms);
+    config.pnl_reward_divisor = get_double_default(
+        kwargs, "pnl_reward_divisor", config.pnl_reward_divisor);
+    config.inventory_penalty_coef = get_double_default(
+        kwargs, "inventory_penalty_coef", config.inventory_penalty_coef);
+    config.agent_rejection_penalty = get_double_default(
+        kwargs, "agent_rejection_penalty", config.agent_rejection_penalty);
+    config.episode_duration_seconds = get_double_default(
+        kwargs, "episode_duration_seconds", config.episode_duration_seconds);
+    config.terminal_inventory_target = get_double_default(
+        kwargs, "terminal_inventory_target", config.terminal_inventory_target);
+    config.terminal_inventory_penalty_coef = get_double_default(
+        kwargs, "terminal_inventory_penalty_coef", config.terminal_inventory_penalty_coef);
 
     config.size_buckets[0] = get_int_default(kwargs, "size_0", config.size_buckets[0]);
     config.size_buckets[1] = get_int_default(kwargs, "size_1", config.size_buckets[1]);
@@ -93,4 +118,7 @@ void my_log(Log* log, Dict* out) {
     dict_set(out, "qr_events", log->qr_events);
     dict_set(out, "qr_trades", log->qr_trades);
     dict_set(out, "inventory", log->inventory);
+    dict_set(out, "inventory_penalty", log->inventory_penalty);
+    dict_set(out, "terminal_inventory_penalty", log->terminal_inventory_penalty);
+    dict_set(out, "agent_rejection_penalty", log->agent_rejection_penalty);
 }

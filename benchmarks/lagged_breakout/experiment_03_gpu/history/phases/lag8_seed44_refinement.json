@@ -1,0 +1,27 @@
+{
+  "source": "/Users/josephleclere/Documents/PufferLib/benchmarks/lagged_breakout/experiment_01",
+  "options": {
+    "additional_steps": 80000000,
+    "eval_interval": 5000000,
+    "eval_episodes": 32,
+    "holdout_episodes": 64,
+    "learning_rate": 0.002,
+    "gamma": null,
+    "target_return": 850.0,
+    "target_checks": 3,
+    "device": "mps",
+    "agents": 4096,
+    "minibatch_size": 16384,
+    "anneal_steps": 1,
+    "normalize_velocity": true,
+    "restart_from_best": false,
+    "warm_start": null
+  },
+  "parent_pid": 98709,
+  "lags": [
+    8
+  ],
+  "seeds": [
+    44
+  ]
+}

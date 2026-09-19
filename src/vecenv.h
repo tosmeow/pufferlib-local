@@ -105,6 +105,7 @@ typedef struct StaticVec {
     int obs_size;
     int num_atns;
     int action_mask_size;        // 0 unless env defines MY_ACTION_MASK
+    int diagnostic_size;         // 0 unless env defines MY_DIAGNOSTIC_SIZE
     int gpu;
     // Optional permutation: agent_perm[slot] = physical agent index in global buffers.
     // NULL = identity (current behavior). Only valid when env defines MY_USES_PERM.
@@ -134,6 +135,7 @@ void static_vec_omp_step(StaticVec* vec);
 void static_vec_seq_step(StaticVec* vec);
 void static_vec_render(StaticVec* vec, int env_id);
 void static_vec_read_profile(StaticVec* vec, float out[NUM_EVAL_PROF]);
+void static_vec_diagnostic(StaticVec* vec, float* out);
 
 // Env info
 int get_obs_size(void);
@@ -418,6 +420,9 @@ StaticVec* create_static_vec(int total_agents, int num_buffers, int gpu, Dict* v
     vec->agents_per_buffer = total_agents / num_buffers;
     vec->obs_size = OBS_SIZE;
     vec->num_atns = NUM_ATNS;
+#ifdef MY_DIAGNOSTIC_SIZE
+    vec->diagnostic_size = MY_DIAGNOSTIC_SIZE;
+#endif
     vec->gpu = gpu;
 
     vec->buffer_env_starts = (int*)calloc(num_buffers, sizeof(int));
@@ -593,6 +598,20 @@ void static_vec_reset(StaticVec* vec) {
         memset(vec->rewards, 0, vec->total_agents * sizeof(float));
         memset(vec->terminals, 0, vec->total_agents * sizeof(float));
     }
+}
+
+void static_vec_diagnostic(StaticVec* vec, float* out) {
+#ifdef MY_DIAGNOSTIC_SIZE
+    Env* envs = (Env*)vec->envs;
+    int agent_offset = 0;
+    for (int i = 0; i < vec->size; i++) {
+        my_diagnostic(&envs[i], out + agent_offset * MY_DIAGNOSTIC_SIZE);
+        agent_offset += envs[i].num_agents;
+    }
+#else
+    (void)vec;
+    (void)out;
+#endif
 }
 
 void create_static_threads(StaticVec* vec, int num_threads, int horizon,

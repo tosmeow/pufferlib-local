@@ -1,0 +1,35 @@
+{
+  "evaluation": {
+    "lag": 0,
+    "volatility": 0.0,
+    "seed": 100000,
+    "episodes_per_policy": 1,
+    "frameskip": 4,
+    "reward_interval": 4,
+    "max_steps": 64,
+    "action_selection": "argmax"
+  },
+  "results": [
+    {
+      "train_lag": 4,
+      "train_volatility": 6.0,
+      "train_seed": 42,
+      "checkpoint": "/__modal/volumes/vo-IUcnO9KzeezNDAMwypMIvm/smoke_20260906_095119_287423cb/lag_4/seed_42/policy.bin",
+      "completed_episodes": 0,
+      "capped_episodes": 1,
+      "summary": {},
+      "episodes": [
+        {
+          "environment_seed": 100000,
+          "completed": false,
+          "return": 0.0,
+          "decision_steps": 64,
+          "action_switch_rate": 0.0,
+          "direction_reversal_rate": 0.0,
+          "noop_fraction": 1.0,
+          "paddle_distance_pixels": 0.0
+        }
+      ]
+    }
+  ]
+}
