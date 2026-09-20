@@ -1,0 +1,23 @@
+{
+  "source": "/Users/josephleclere/Documents/PufferLib/benchmarks/lagged_breakout/calibration_velocity_source",
+  "options": {
+    "additional_steps": 5000000,
+    "eval_interval": 1000000,
+    "eval_episodes": 16,
+    "holdout_episodes": 32,
+    "learning_rate": 0.002,
+    "target_return": 850.0,
+    "target_checks": 3,
+    "device": "cpu",
+    "agents": 256,
+    "minibatch_size": 8192,
+    "anneal_steps": null,
+    "normalize_velocity": true
+  },
+  "lags": [
+    4
+  ],
+  "seeds": [
+    42
+  ]
+}
