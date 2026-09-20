@@ -86,6 +86,9 @@ image = (
     )
     .workdir(REMOTE_ROOT)
     .env({
+        # With include_source=False, Modal imports the function module from
+        # the copy uploaded into the image rather than mounting local sources.
+        "PYTHONPATH": f"{REMOTE_ROOT}:{REMOTE_ROOT}/scripts",
         "PYTHONUNBUFFERED": "1",
         "OMP_NUM_THREADS": "1",
         "OPENBLAS_NUM_THREADS": "1",
