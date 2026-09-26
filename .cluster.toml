@@ -1,0 +1,16 @@
+[project]
+name = "pufferlib-local"
+
+[resources]
+cpus = 2
+memory = "2G"
+gpus = 0
+time = "01:00:00"
+scratch_gib = 4
+
+# Programs can write to CLUSTER_RESULTS_DIR, or declare output paths here.
+[artifacts]
+paths = ["results", "outputs"]
+
+[snapshot]
+exclude = ["results/**", "outputs/**", "build/**", "dist/**", "target/**"]

@@ -83,7 +83,9 @@ PLATFORM="$(uname -s)"
 if [ "$PLATFORM" = "Linux" ]; then
     RAYLIB_NAME='raylib-5.5_linux_amd64'
     OMP_FLAGS=(-fopenmp)
-    OMP_LIB=-lomp5
+    # Native CUDA builds pass -fopenmp to the host compiler, which selects
+    # its OpenMP runtime (libgomp for GCC). Do not also force LLVM's runtime.
+    OMP_LIB=""
     SANITIZE_FLAGS=(-fsanitize=address,undefined,bounds,pointer-overflow -fno-omit-frame-pointer)
     STANDALONE_LDFLAGS=(-lGL)
 else

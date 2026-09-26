@@ -97,6 +97,10 @@ docs/_build/
 # PyBuilder
 target/
 
+# This is environment source, not a generated build directory.
+!ocean/target/
+!ocean/target/**
+
 # Jupyter Notebook
 .ipynb_checkpoints
 
