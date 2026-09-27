@@ -62,3 +62,48 @@ final evaluation/adaptation and CPU/GPU parity passed (max error 7.49e-8).
 Checkpoint, INI and JSON hashes matched the publication index. Smoke outputs:
 `/cluster/users/tosma/projects/pufferlib-local/jobs/02770aec-a0d8-4918-8fef-63a42435500e/artifacts`.
 The full runs add a durable copy of monitoring history to that tested driver.
+
+### Observations from the longer runs
+
+All three reached 1,999,962,112 training steps. CPU checkpoint evaluations
+used the same 64 seeded matches per opponent at each checkpoint. Final warm
+self-play entropy excludes rounds 1–100; uniform entropy is 1.098612 nats.
+
+| Self-play share | Final self-play entropy | Rock reward | Counter reward |
+|---|---:|---:|---:|
+| One-third | 3.43e-62 | +0.499703 | -0.343156 |
+| 80% | 3.79e-6 | +0.998188 | -0.733453 |
+| 95% | 1.97e-5 | +0.995172 | +0.493734 |
+
+Monitoring captured deterioration, not merely a poor final endpoint. At 200M,
+the 80% run scored +0.976 against counter; by 800M it scored -0.0012 with
+self-play entropy 0.0002. The 95% run oscillated: counter reward -0.9733 at
+600M, +0.4648 at 800M, then -0.9925 at 1.6B. The one-third control lost
+almost every round against both scripted bots at 1B, before partial recovery.
+All checkpoints remain available; no early stopping was applied.
+
+These are provisional single-seed observations. More steps and larger
+self-play shares did not prevent low-entropy collapse in these runs. They do
+not isolate the cause. Extending the budget also extends cosine LR annealing:
+at 200M in a 2B run the LR is still about 97.6% of its initial value, whereas
+the earlier 200M run was ending its schedule. The same seed does not ensure
+identical stochastic trajectories across concurrent training runs.
+
+Verification limitation: jobs 902 and 903 completed training and CPU evaluation
+but failed their final strict CPU/GPU parity assertion. Maximum errors were
+4.16923e-5 and 1.37955e-5 respectively (tolerance 1e-5); no tolerance was relaxed.
+Thus their overall job state is failed / exit 1, not successful. Publication
+and scratch cleanup succeeded; 28 checkpoint/config/JSON hashes per job were
+verified against the artifact index. GPU training logs independently reported
+final aggregate entropy approximately 0.000 and 0.005 respectively, supporting
+low-entropy behavior without validating every CPU rollout or reward estimate.
+Resolve parity before treating the CPU measurements as fully validated.
+
+Job 904 likewise finished training/evaluation but failed parity: maximum error
+1.803891e-4 versus tolerance 1e-5. Slurm failed / exit 1; publication and scratch
+cleanup confirmed, and all 28 checkpoint/config/JSON hashes verified. Its GPU
+training log also reported final aggregate entropy 0.000. All three research
+jobs are terminal; none remains active. Next: investigate CPU/GPU numerical
+agreement on these saturated models, then consider a lower LR or a fixed
+decay schedule and entropy-strength comparison before spending more steps.
+These are proposed diagnostics, not user-agreed scientific conclusions.

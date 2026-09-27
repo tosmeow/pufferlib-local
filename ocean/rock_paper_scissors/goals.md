@@ -77,6 +77,16 @@ verified byte-for-byte against job 897's snapshot before removal was finalized.
 
 ## Worklog
 
+- 2026-09-27: Jobs 902–904 each reached 1,999,962,112 training steps. Monitoring
+  found severe self-play entropy collapse and scripted-bot reward deterioration
+  at all three mixture shares; see SELFPLAY_RESULTS.md for checkpoint history
+  and provisional final measurements. All three failed their final strict
+  CPU/GPU parity assertion (not training); artifacts were published, cleanup
+  confirmed, and 28 key hashes per job verified. GPU training logs also showed
+  very low final entropy. No runs remain active. Next: diagnose parity on the
+  saturated checkpoints, discuss LR-schedule/entropy controls, then replicate
+  promising settings across seeds. Do not describe these jobs as fully validated.
+
 - 2026-09-27: At user request, added configurable self-play share and live
   checkpoint monitoring; submitted 2B-step runs at 80%, 95%, and one-third
   self-play (jobs 902–904), snapshot `07b10e9ac68cb1cef2465c9d03ee806f7c69ef38`.
