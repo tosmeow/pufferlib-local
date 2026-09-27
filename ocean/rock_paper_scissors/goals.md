@@ -45,6 +45,13 @@ Logs average scores/performance over both learner perspectives; self-play
 scores cancel, so use the separate bot evaluations to assess exploitation.
 Uniform/rock/counter probability-table evaluations remain available.
 
+Observations now have seven inputs: the original six previous-move indicators
+and completed rounds / 999. `env.round_observation=0` holds the last input at
+zero for a matched control. New training needs fresh seven-input weights.
+To evaluate an older six-input checkpoint, pass `6 0` after its SHA256 in
+`scripts/rps.sh eval/parity`; new seven-input evaluations default to clock on.
+For a seven-input clock-off checkpoint pass `7 0` explicitly.
+
 Adding a preset in C requires a rebuild; selecting
 an existing preset through the config does not. The run script rebuilds before
 training and forwards its arguments to the trainer.
@@ -193,3 +200,17 @@ verified byte-for-byte against job 897's snapshot before removal was finalized.
   sub-1-GiB RSS and ~0.6-GiB VRAM. Shell syntax, CLI help, and diff checks passed.
   Next: use `scripts/rps.sh` for subsequent training/evaluation; research
   conclusions are unchanged by this cleanup.
+
+- 2026-09-27: Added normalized within-match round count as input seven and a
+  constant-zero ablation. Updated CPU/GPU evaluation, architecture size checks,
+  legacy six-input evaluation options, and clock progression/reset tests. Smoke
+  job 905 passed sanitizers, training/evaluation and parity. Short paired 200M
+  runs 906 (clock on) and 907 (off) completed training; snapshot
+  `134fff94964429bd6c11bf1f1e55c4267a030f35`. Clock-on final self-play entropy
+  0.309 versus 0.203 off, both far from uniform; scripted-bot rewards slightly
+  worse with clock. Job 906 passed parity/exit 0; job 907 failed final strict
+  parity/exit 1, making that comparison provisional. Publication, key artifact
+  hashes and scratch cleanup verified for all three. See
+  [round-observation results](ROUND_OBSERVATION_RESULTS.md) for paths, checkpoint
+  histories, adaptation and limitations. No jobs active. Next: discuss this
+  mixed single-seed result, diagnose control parity, then replicate if useful.

@@ -1,4 +1,4 @@
-// Evaluate 6 -> hidden -> MinGRU layers -> (3 logits + value).
+// Evaluate configurable observations -> hidden -> MinGRU layers -> (3 logits + value).
 // Reuse the repository's CPU inference implementation; no training or argmax.
 #include <stdint.h>
 #include "../src/puffercpu.c"
@@ -12,8 +12,14 @@
 #ifndef RPS_NUM_LAYERS
 #define RPS_NUM_LAYERS 4
 #endif
+#ifndef RPS_OBS_SIZE
+#define RPS_OBS_SIZE 7
+#endif
+#ifndef RPS_ROUND_OBSERVATION
+#define RPS_ROUND_OBSERVATION 1
+#endif
 enum { H = RPS_HIDDEN_SIZE, L = RPS_NUM_LAYERS, STATE = H * L,
-    WEIGHTS = 10 * H + 3 * L * H * H, MATCHES = 64, ROUNDS = 1000 };
+    WEIGHTS = (RPS_OBS_SIZE + 4) * H + 3 * L * H * H, MATCHES = 64, ROUNDS = 1000 };
 static uint64_t rng_state;
 static double uniform01(void) {
     rng_state ^= rng_state >> 12;
@@ -25,8 +31,11 @@ static int sample(const double p[3]) {
     double u = uniform01();
     return u < p[0] ? 0 : (u < p[0] + p[1] ? 1 : 2);
 }
-static void probabilities(PufferNet* net, int mine, int theirs, double p[3]) {
-    float obs[6] = {0};
+static void probabilities(PufferNet* net, int mine, int theirs, int step, double p[3]) {
+    float obs[RPS_OBS_SIZE] = {0};
+#if RPS_OBS_SIZE == 7
+    obs[6] = RPS_ROUND_OBSERVATION ? (float)step / (ROUNDS - 1) : 0;
+#endif
     if (mine >= 0) obs[mine] = 1;
     if (theirs >= 0) obs[3 + theirs] = 1;
     linear(net->encoder, obs);
@@ -52,7 +61,7 @@ static void probes(FILE* out, PufferNet* net, const char* scenario, int match, i
         int mine = code < 0 ? -1 : code / 3;
         int theirs = code < 0 ? -1 : code % 3;
         double p[3];
-        probabilities(net, mine, theirs, p);
+        probabilities(net, mine, theirs, step, p);
         fprintf(out, "%s,%d,%d,%d,%d,%.10g,%.10g,%.10g\n",
             scenario, match, step, mine, theirs, p[0], p[1], p[2]);
     }
@@ -64,7 +73,7 @@ int main(int argc, char** argv) {
     assert(H > 0 && H % 8 == 0 && L > 0);
     assert(w && w->size - 7 == WEIGHTS);
     int sizes[] = {3};
-    PufferNet* net = make_puffernet(w, 1, 6, H, L, sizes, 1);
+    PufferNet* net = make_puffernet(w, 1, RPS_OBS_SIZE, H, L, sizes, 1);
     assert(w->idx == WEIGHTS);
     if (argc == 5) {
         FILE* parity = fopen(argv[2], "w");
@@ -75,7 +84,7 @@ int main(int argc, char** argv) {
             for (int t = 0; t < ROUNDS; t++) {
                 int code = t == 0 ? b - 1 : (t * 7 + b * 5 + t / 7) % 9;
                 double p[3];
-                probabilities(net, code < 0 ? -1 : code / 3, code < 0 ? -1 : code % 3, p);
+                probabilities(net, code < 0 ? -1 : code / 3, code < 0 ? -1 : code % 3, t, p);
                 fprintf(parity, "%d,%d,%.10g,%.10g,%.10g\n", b, t, p[0], p[1], p[2]);
             }
         }
@@ -85,7 +94,7 @@ int main(int argc, char** argv) {
         return 0;
     }
     w->idx = 0;
-    PufferNet* opponent = make_puffernet(w, 1, 6, H, L, sizes, 1);
+    PufferNet* opponent = make_puffernet(w, 1, RPS_OBS_SIZE, H, L, sizes, 1);
     FILE* out = fopen(argv[2], "w");
     FILE* probe = fopen(argv[3], "w");
     assert(out && probe);
@@ -108,10 +117,10 @@ int main(int argc, char** argv) {
                 if (t == 1 || t == 10 || t == 100 || t == 999)
                     probes(probe, net, scenarios[s], m, t);
                 double p[3], q[3];
-                probabilities(net, a_prev, b_prev, p);
+                probabilities(net, a_prev, b_prev, t, p);
                 int a = sample(p), b;
                 if (s == 0) {
-                    probabilities(opponent, b_prev, a_prev, q);
+                    probabilities(opponent, b_prev, a_prev, t, q);
                     b = sample(q);
                 } else if (s == 1) b = (int)(3 * uniform01());
                 else if (s <= 4) b = s - 2;

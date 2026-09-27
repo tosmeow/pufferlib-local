@@ -3,13 +3,15 @@
 #include "../src/pufferl.cu"
 
 int main(int argc, char** argv) {
-    assert(argc == 3 || argc == 5);
+    assert(argc == 3 || argc == 5 || argc == 6);
     Ini ini = {};
     puf_ini_load_env(&ini, PUFFER_ENV_NAME, 0, NULL);
-    if (argc == 5) {
+    if (argc >= 5) {
         puf_ini_put(&ini, "policy.hidden_size", argv[3]);
         puf_ini_put(&ini, "policy.num_layers", argv[4]);
     }
+    int round_observation = argc == 6 ? atoi(argv[5]) : 1;
+    assert(round_observation == 0 || round_observation == 1);
     int hidden = (int)puf_ini_get(&ini, "policy", "hidden_size");
     int layers = (int)puf_ini_get(&ini, "policy", "num_layers");
     puf_ini_put(&ini, "vec.total_agents", "10");
@@ -24,19 +26,22 @@ int main(int argc, char** argv) {
     PuffeRL* p = create_pufferl(&ini, &ctx);
     pufferl_load_policy(p, 0, argv[1]);
     Policy* pol = &p->policies[0];
-    Prec input = {.shape = {10, 6}};
-    assert(cudaMalloc((void**)&input.data, 60 * sizeof(float)) == cudaSuccess);
+    Prec input = {.shape = {10, OBS_SIZE}};
+    assert(cudaMalloc((void**)&input.data, 10 * OBS_SIZE * sizeof(float)) == cudaSuccess);
     assert(cudaMemset(pol->buffer_states[0].data, 0, layers*10*hidden*sizeof(float)) == cudaSuccess);
     FILE* out = fopen(argv[2], "w");
     assert(out);
     fprintf(out, "agent,step,p_rock,p_paper,p_scissors\n");
     for (int t = 0; t < 1000; t++) {
-        float obs[60] = {0}, logits[40];
+        float obs[10 * OBS_SIZE] = {0}, logits[40];
         for (int b = 0; b < 10; b++) {
             int code = t == 0 ? b - 1 : (t * 7 + b * 5 + t / 7) % 9;
+#if OBS_SIZE == 7
+            obs[b*OBS_SIZE + 6] = round_observation ? (float)t / 999 : 0;
+#endif
             if (code >= 0) {
-                obs[b*6 + code/3] = 1;
-                obs[b*6 + 3 + code%3] = 1;
+                obs[b*OBS_SIZE + code/3] = 1;
+                obs[b*OBS_SIZE + 3 + code%3] = 1;
             }
         }
         assert(cudaMemcpy(input.data, obs, sizeof(obs), cudaMemcpyHostToDevice) == cudaSuccess);

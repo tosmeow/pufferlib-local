@@ -5,7 +5,13 @@ typedef float obs_t;
 
 #define AGENTS 2
 #define ACT_SIZES {3}
-#define OBS_SIZE 6
+#ifndef RPS_OBS_SIZE
+#define RPS_OBS_SIZE 7
+#endif
+#define OBS_SIZE RPS_OBS_SIZE
+#if OBS_SIZE != 6 && OBS_SIZE != 7
+#error RPS observations must have 6 legacy inputs or 7 inputs with a round feature
+#endif
 #define NUM_ATNS 1
 #define MAX_STEPS 1000
 
@@ -55,7 +61,7 @@ struct Env {
     Log log; int num_agents; unsigned int rng; // Required
     Agent agents[AGENTS]; int tag, boundary_reached; // Required
     Player players[2];
-    int bot_policy, match_type;
+    int bot_policy, match_type, round_observation;
     double selfplay_share;
     const Opponent* opponent;
     int steps;
@@ -68,6 +74,12 @@ void puf_init(Env* env, Dict* kwargs){
         exit(EXIT_FAILURE);
     }
     env->bot_policy = (int)bot;
+    double clock = dict_get(kwargs, "round_observation");
+    if (!(clock == 0 || clock == 1)) {
+        fprintf(stderr, "RPS round_observation must be 0 or 1\n");
+        exit(EXIT_FAILURE);
+    }
+    env->round_observation = (int)clock;
     env->selfplay_share = dict_get(kwargs, "selfplay_share");
     if (!(env->selfplay_share >= 0 && env->selfplay_share <= 1)) {
         fprintf(stderr, "RPS selfplay_share must be between 0 and 1\n");
@@ -105,6 +117,10 @@ void compute_observations(Env* env) {
         if (theirs >= 0 && theirs < 3) {
             obs[3 + theirs] = 1.0f;
         }
+#if OBS_SIZE == 7
+        // Completed rounds: 0 at opening, 1 before the final action.
+        obs[6] = env->round_observation ? (float)env->steps / (MAX_STEPS - 1) : 0;
+#endif
     }
 }
 

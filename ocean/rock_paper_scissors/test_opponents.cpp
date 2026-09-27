@@ -22,6 +22,7 @@ int main() {
     }
 
     Dict kwargs = {};
+    dict_set(&kwargs, "round_observation", 1);
     dict_set(&kwargs, "selfplay_share", 1.0 / 3);
     Env env = {};
     float obs[AGENTS][OBS_SIZE] = {}, actions[AGENTS] = {};
@@ -46,8 +47,9 @@ int main() {
         }
     };
     auto check_obs = [&](int slot, int mine, int theirs) {
-        for (int j = 0; j < OBS_SIZE; j++)
+        for (int j = 0; j < 6; j++)
             assert(obs[slot][j] == (j == mine || j == 3 + theirs));
+        assert(obs[slot][6] == (float)env.steps / (MAX_STEPS - 1));
     };
 
     // Every self-play action pair: simultaneous moves and mirrored perspectives.
@@ -114,6 +116,8 @@ int main() {
             for (int step = 0; step < MAX_STEPS - 1; step++) {
                 puf_step(&env);
                 assert(env.match_type == selected);
+                for (int i = 0; i < AGENTS; i++)
+                    assert(obs[i][6] == (float)(step + 1) / (MAX_STEPS - 1));
                 assert(terminals[0] == 0 && terminals[1] == 0);
             }
             puf_step(&env);
@@ -153,6 +157,12 @@ int main() {
             assert(std::abs(weighted[bot] - 6000 * (1 - share)) < 250);
         if (share == 0) assert(weighted[BOT_SELFPLAY] == 0);
         if (share == 1) assert(weighted[BOT_SELFPLAY] == 12000);
+    }
+    dict_set(&kwargs, "round_observation", 0);
+    reset(BOT_SELFPLAY);
+    for (int step = 0; step < MAX_STEPS + 1; step++) {
+        puf_step(&env);
+        for (int i = 0; i < AGENTS; i++) assert(obs[i][6] == 0);
     }
     dict_clear(&kwargs);
     puts("RPS scripted and self-play tests passed");

@@ -7,9 +7,9 @@ Usage: bash scripts/rps.sh COMMAND ...
   run BOT [STEPS [LR]]              Train fresh, evaluate, and check parity.
                                    Defaults: 200M steps, LR 0.015, seed 73.
   train [--section.key=value ...]   Train only, with trainer overrides.
-  eval CHECKPOINT HIDDEN [LAYERS [SHA256]]
+  eval CHECKPOINT HIDDEN [LAYERS [SHA256 [OBS_SIZE [ROUND_OBS]]]]
                                    Evaluate + adaptation + CPU/GPU parity.
-  parity CHECKPOINT HIDDEN [LAYERS [SHA256]]
+  parity CHECKPOINT HIDDEN [LAYERS [SHA256 [OBS_SIZE [ROUND_OBS]]]]
                                    Check CPU/GPU inference only.
   analyze summary DIRECTORY [--output DIRECTORY]
   analyze adaptation CSV SHA256 [--output DIRECTORY]
@@ -26,11 +26,15 @@ case "$command" in
     *) usage >&2; exit 1 ;;
 esac
 root=${CLUSTER_RESULTS_DIR:?Submit through cluster run}
+obs_size=7; round_obs=1
 if [[ "$command" == run ]]; then
     bot=${1:?run needs BOT}; steps=${2:-200000000}; learning_rate=${3:-0.015}
     case "$bot" in 0|1|2|3|4|5) ;; *) echo 'BOT must be 0..5' >&2; exit 1 ;; esac
 elif [[ "$command" == eval || "$command" == parity ]]; then
     checkpoint=${1:?checkpoint required}; hidden=${2:?hidden size required}; layers=${3:-4}
+    obs_size=${5:-7}; round_obs=${6:-1}
+    [[ "$obs_size" == 6 || "$obs_size" == 7 ]]
+    [[ "$round_obs" == 0 || "$round_obs" == 1 ]]
     if [[ $# -ge 4 ]]; then printf '%s  %s\n' "$4" "$checkpoint" | sha256sum --check; fi
 fi
 
@@ -82,19 +86,20 @@ train() {
 compile_cpu_probe() {
     gcc -O2 -std=c11 -D_POSIX_C_SOURCE=200809L -DRPS_BOT_EVAL -Isrc \
         -DRPS_HIDDEN_SIZE="$hidden" -DRPS_NUM_LAYERS="$layers" \
+        -DRPS_OBS_SIZE="$obs_size" -DRPS_ROUND_OBSERVATION="$round_obs" \
         -Iraylib-5.5_linux_amd64/include scripts/rps_policy_probe.c -lm -o build/rps_policy_probe
 }
 
 parity() {
     mkdir -p "$root/parity"
-    nvcc -O2 -arch=sm_120 -std=c++17 -DPRECISION_FLOAT -I. -Isrc -Ivendor \
+    nvcc -O2 -arch=sm_120 -std=c++17 -DPRECISION_FLOAT -DRPS_OBS_SIZE="$obs_size" -I. -Isrc -Ivendor \
         -Iraylib-5.5_linux_amd64/include -I"$CUDA_HOME/include/cccl" \
         -Xcompiler=-fopenmp -Xcompiler=-Wno-narrowing --diag-suppress=2361 \
         scripts/rps_gpu_probe.cu raylib-5.5_linux_amd64/lib/libraylib.a \
         -L"$CUDA_HOME/lib64" -lcudart -lnccl -lnvidia-ml -lcublas -lcusolver -lcurand \
         -lm -Xlinker=-lpthread -lGL -o build/rps_gpu_probe
     build/rps_policy_probe "$checkpoint" "$root/parity/cpu.csv" unused parity
-    build/rps_gpu_probe "$checkpoint" "$root/parity/gpu.csv" "$hidden" "$layers"
+    build/rps_gpu_probe "$checkpoint" "$root/parity/gpu.csv" "$hidden" "$layers" "$round_obs"
     python3 scripts/rps_analysis.py parity "$root/parity"
 }
 
@@ -115,10 +120,11 @@ checkpoint = max((root/'checkpoints/rock_paper_scissors'/run_id).glob('*.bin'),
 print(checkpoint)
 print(c.getint('policy', 'hidden_size'))
 print(c.getint('policy', 'num_layers'))
+print(c.getint('env', 'round_observation'))
 PYCODE
         )
-        [[ ${#model_info[@]} == 3 ]]
-        checkpoint=${model_info[0]}; hidden=${model_info[1]}; layers=${model_info[2]}
+        [[ ${#model_info[@]} == 4 ]]
+        checkpoint=${model_info[0]}; hidden=${model_info[1]}; layers=${model_info[2]}; round_obs=${model_info[3]}
         ;;
 esac
 compile_cpu_probe
@@ -133,6 +139,7 @@ fi
 parity
 {
     printf 'checkpoint=%s\nhidden_size=%s\nnum_layers=%s\n' "$checkpoint" "$hidden" "$layers"
+    printf 'obs_size=%s\nround_observation=%s\n' "$obs_size" "$round_obs"
     printf 'evaluation_seed_base=20260926\nmatches_per_opponent=64\nrounds_per_match=1000\n'
     if [[ "$command" == run ]]; then
         printf 'bot_policy=%s\ntraining_seed=73\nrequested_timesteps=%s\nlearning_rate=%s\n' \

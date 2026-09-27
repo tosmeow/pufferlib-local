@@ -1,5 +1,30 @@
 # Separate training against scripted opponents
 
+## Round-observation comparison — 2026-09-27
+
+User requested normalized within-match step count and a shorter training rerun.
+Add input 7: completed rounds / 999 (zero at opening, one before final move,
+reset to zero at match reset). This exposes history length, not calibrated
+confidence or opponent identity. Default `env.round_observation=1`; setting 0
+keeps the seventh input zero for a same-architecture ablation. Legacy six-input
+checkpoints require explicit OBS_SIZE=6 in eval/parity and cannot initialize
+the new seven-input network.
+
+Fresh paired runs: 200M requested agent steps, seed 73, equal rock/counter/
+self-play mixture, hidden 64, four layers, LR 0.0015, existing cosine schedule
+and entropy coefficient. Evaluate checkpoints every 763 updates (~50M steps)
+and final CPU/GPU parity without relaxing tolerance. Compare warm self-play
+entropy/TV, bot rewards and adaptation timing. One seed is exploratory.
+
+Submit through Slurm: `python3 scripts/rps_monitor.py 0.3333333333333333
+--steps 200000000 --interval 763 --round-observation 1` (or 0 for control).
+First run a two-update clock smoke test. Each job requests one GPU, 3 CPUs,
+2 GiB RAM, 4 GiB scratch, 10 minutes. The extra 64 encoder parameters add only
+256 bytes to weights; prior usage ~0.75 GiB RSS / 0.6 GiB VRAM remains the basis
+for resource estimates. Four checkpoint evaluations plus final output are
+roughly 250 MiB; no dataset is loaded. Outputs use the existing durable history
+and publication workflow. Full previous study remains in SELFPLAY_RESULTS.md.
+
 ## Longer weighted self-play comparison — 2026-09-27
 
 User requested longer runs, higher self-play shares, and collapse monitoring.

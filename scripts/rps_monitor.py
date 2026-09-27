@@ -17,6 +17,7 @@ def main():
     parser.add_argument("share", type=float)
     parser.add_argument("--steps", type=int, default=2_000_000_000)
     parser.add_argument("--interval", type=int, default=3052)
+    parser.add_argument("--round-observation", type=int, choices=(0, 1), default=1)
     args = parser.parse_args()
     assert 0 <= args.share <= 1
     root = Path(os.environ["CLUSTER_RESULTS_DIR"])
@@ -31,18 +32,18 @@ def main():
         "ocean/rock_paper_scissors/test_opponents.cpp", "-o", "build/rps_opponent_tests")
     run("build/rps_opponent_tests")
     run("gcc", "-O2", "-std=c11", "-D_POSIX_C_SOURCE=200809L", "-DRPS_BOT_EVAL",
-        "-DRPS_HIDDEN_SIZE=64", "-DRPS_NUM_LAYERS=4", "-Isrc",
+        f"-DRPS_ROUND_OBSERVATION={args.round_observation}", "-DRPS_HIDDEN_SIZE=64", "-DRPS_NUM_LAYERS=4", "-Isrc",
         "-Ibuild/rps_test_headers", "scripts/rps_policy_probe.c", "-lm",
         "-o", "build/rps_monitor_probe")
     run_id = "long_mix_seed_73"
     command = ["bash", "scripts/rps.sh", "train", "--env.bot_policy=5",
-               f"--env.selfplay_share={args.share}", "--policy.hidden_size=64",
+               f"--env.selfplay_share={args.share}", f"--env.round_observation={args.round_observation}", "--policy.hidden_size=64",
                "--policy.num_layers=4", "--base.seed=73", f"--base.run_id={run_id}",
                "--base.load_model_path=None", "--train.learning_rate=0.0015",
                f"--train.total_timesteps={args.steps}",
                f"--base.checkpoint_interval={args.interval}"]
     (root / "protocol.json").write_text(json.dumps(dict(command=command,
-        share=args.share, seed=73, requested_steps=args.steps,
+        share=args.share, round_observation=args.round_observation, obs_size=7, seed=73, requested_steps=args.steps,
         warning_thresholds=dict(low_selfplay_entropy=0.5, entropy_drop=0.2,
                                 scripted_reward_below=0.9)), indent=2))
     checkpoints = root / "checkpoints/rock_paper_scissors" / run_id
@@ -102,7 +103,7 @@ def main():
     assert seen, "No checkpoints produced"
     final = max(checkpoints.glob("*.bin"), key=lambda p: int(p.stem))
     run("bash", "scripts/rps.sh", "eval", str(final), "64", "4",
-        hashlib.sha256(final.read_bytes()).hexdigest())
+        hashlib.sha256(final.read_bytes()).hexdigest(), "7", str(args.round_observation))
 
 
 if __name__ == "__main__":
