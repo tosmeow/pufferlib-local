@@ -3,9 +3,15 @@
 #include "../src/pufferl.cu"
 
 int main(int argc, char** argv) {
-    assert(argc == 3);
+    assert(argc == 3 || argc == 5);
     Ini ini = {};
     puf_ini_load_env(&ini, PUFFER_ENV_NAME, 0, NULL);
+    if (argc == 5) {
+        puf_ini_put(&ini, "policy.hidden_size", argv[3]);
+        puf_ini_put(&ini, "policy.num_layers", argv[4]);
+    }
+    int hidden = (int)puf_ini_get(&ini, "policy", "hidden_size");
+    int layers = (int)puf_ini_get(&ini, "policy", "num_layers");
     puf_ini_put(&ini, "vec.total_agents", "10");
     puf_ini_put(&ini, "vec.num_buffers", "1");
     puf_ini_put(&ini, "vec.num_threads", "1");
@@ -20,7 +26,7 @@ int main(int argc, char** argv) {
     Policy* pol = &p->policies[0];
     Prec input = {.shape = {10, 6}};
     assert(cudaMalloc((void**)&input.data, 60 * sizeof(float)) == cudaSuccess);
-    assert(cudaMemset(pol->buffer_states[0].data, 0, 4*10*16*sizeof(float)) == cudaSuccess);
+    assert(cudaMemset(pol->buffer_states[0].data, 0, layers*10*hidden*sizeof(float)) == cudaSuccess);
     FILE* out = fopen(argv[2], "w");
     assert(out);
     fprintf(out, "agent,step,p_rock,p_paper,p_scissors\n");

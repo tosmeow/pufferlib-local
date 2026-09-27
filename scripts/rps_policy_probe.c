@@ -1,9 +1,19 @@
-// Evaluate the default 6 -> 16 -> 4xMinGRU -> (3 logits + value) RPS policy.
+// Evaluate 6 -> hidden -> MinGRU layers -> (3 logits + value).
 // Reuse the repository's CPU inference implementation; no training or argmax.
 #include <stdint.h>
 #include "../src/puffercpu.c"
+#ifdef RPS_BOT_EVAL
+#include "../ocean/rock_paper_scissors/rock_paper_scissors.h"
+#endif
 
-enum { H = 16, L = 4, STATE = H * L, MATCHES = 64, ROUNDS = 1000 };
+#ifndef RPS_HIDDEN_SIZE
+#define RPS_HIDDEN_SIZE 16
+#endif
+#ifndef RPS_NUM_LAYERS
+#define RPS_NUM_LAYERS 4
+#endif
+enum { H = RPS_HIDDEN_SIZE, L = RPS_NUM_LAYERS, STATE = H * L,
+    WEIGHTS = 10 * H + 3 * L * H * H, MATCHES = 64, ROUNDS = 1000 };
 static uint64_t rng_state;
 static double uniform01(void) {
     rng_state ^= rng_state >> 12;
@@ -51,10 +61,11 @@ static void probes(FILE* out, PufferNet* net, const char* scenario, int match, i
 int main(int argc, char** argv) {
     assert(argc == 4 || argc == 5); // optional final argument enables parity mode
     Weights* w = load_weights(argv[1]);
-    assert(w && w->size - 7 == 3232);
+    assert(H > 0 && H % 8 == 0 && L > 0);
+    assert(w && w->size - 7 == WEIGHTS);
     int sizes[] = {3};
     PufferNet* net = make_puffernet(w, 1, 6, H, L, sizes, 1);
-    assert(w->idx == 3232);
+    assert(w->idx == WEIGHTS);
     if (argc == 5) {
         FILE* parity = fopen(argv[2], "w");
         assert(parity);
@@ -82,8 +93,12 @@ int main(int argc, char** argv) {
     fprintf(probe, "scenario,match,step,previous_self,previous_opponent,p_rock,p_paper,p_scissors\n");
     probes(probe, net, "zero_memory", 0, 0);
     const char* scenarios[] = {"selfplay", "uniform", "always_rock", "always_paper",
-        "always_scissors", "cycle", "copy_previous", "win_stay_lose_shift"};
-    for (int s = 0; s < 8; s++) {
+        "always_scissors", "cycle", "copy_previous", "win_stay_lose_shift",
+#ifdef RPS_BOT_EVAL
+        "bot_uniform", "bot_counter", "bot_rock",
+#endif
+    };
+    for (int s = 0; s < (int)(sizeof(scenarios) / sizeof(scenarios[0])); s++) {
         for (int m = 0; m < MATCHES; m++) {
             rng_state = UINT64_C(20260926) + 100003 * s + 997 * m;
             memset(net->mingru->state, 0, STATE * sizeof(float));
@@ -102,7 +117,10 @@ int main(int argc, char** argv) {
                 else if (s <= 4) b = s - 2;
                 else if (s == 5) b = (t + m) % 3;
                 else if (s == 6) b = a_prev < 0 ? m % 3 : a_prev;
-                else b = b_prev < 0 ? m % 3 : (last_reward > 0 ? (b_prev + 1) % 3 : b_prev);
+                else if (s == 7) b = b_prev < 0 ? m % 3 : (last_reward > 0 ? (b_prev + 1) % 3 : b_prev);
+#ifdef RPS_BOT_EVAL
+                else b = opponent_action(&opponents[s - 8], a_prev, uniform01());
+#endif
                 int reward = a == b ? 0 : ((a - b + 3) % 3 == 1 ? 1 : -1);
                 fprintf(out, "%s,%d,%d,%d,%d,%.10g,%.10g,%.10g,%d,%d,%d\n",
                     scenarios[s], m, t, a_prev, b_prev, p[0], p[1], p[2], a, b, reward);
